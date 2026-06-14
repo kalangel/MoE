@@ -176,3 +176,5 @@ React 18 + Vite + TypeScript · Zustand (состояние) · Framer Motion (�
 
 Tsarina, Ayato, Lushii, Condorin, Richer — разные фракции и уровни силы; при генерации
 двое случайно получают щит. Lushii — лёгкая первая цель.
+#   M o E  
+ 
