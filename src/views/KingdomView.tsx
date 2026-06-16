@@ -37,8 +37,7 @@ export default function KingdomView() {
   const choosing = !s.onboarded && s.tutorialStep === 'choose';
 
   return (
-    <div className={`view-scroll ${s.tutorialStep ? 'tut-active' : ''}`}>
-      {choosing && <div className="tut-overlay" />}
+    <div className="view-scroll">
       <div className={`kingdom-svg-wrap card ${choosing ? 'tut-dim' : ''}`} style={{ padding: 4, overflow: 'hidden' }}>
         <svg viewBox="0 0 1000 680" xmlns="http://www.w3.org/2000/svg">
           <defs>
@@ -145,8 +144,8 @@ export default function KingdomView() {
         </svg>
       </div>
 
-      {/* ресурсная зона: 12 участков под кастомную застройку */}
-      <ResourceZone choosing={choosing} onOpenPlot={(i) => setOpenPlot(i)} />
+      {/* ресурсная зона: 12 участков под кастомную застройку (в обычном потоке вне онбординга) */}
+      {!choosing && <ResourceZone choosing={false} onOpenPlot={(i) => setOpenPlot(i)} />}
 
       {/* панель действий */}
       <div className={`row ${choosing ? 'tut-dim' : ''}`} style={{ gap: 10, flexWrap: 'wrap' }}>
@@ -171,6 +170,13 @@ export default function KingdomView() {
           </div>
         ))}
       </div>
+
+      {/* онбординг: фокус на ресурсной зоне — затемняем всё, зону выводим по центру поверх */}
+      {choosing && (
+        <div className="tut-overlay">
+          <ResourceZone choosing onOpenPlot={(i) => setOpenPlot(i)} />
+        </div>
+      )}
 
       <AnimatePresence>
         {openBuilding && <BuildingModal building={openBuilding} onClose={() => setOpenBuilding(null)} />}
