@@ -1,40 +1,45 @@
 import { useState } from 'react';
 import { AnimatePresence } from 'framer-motion';
 import { useGame } from '../game/store';
-import { BUILDINGS, FACTIONS } from '../game/config';
+import { ADVISOR, BUILDINGS, FACTIONS } from '../game/config';
 import { fmtDuration } from '../game/balance';
 import type { BuildingId } from '../game/types';
 import CastleSVG from '../components/CastleSVG';
 import { CommonDefs, LevelDisc } from '../components/svgKit';
 import BuildingGlyph from '../components/IsoBuilding';
 import BuildingModal from '../components/BuildingModal';
+import PlotModal from '../components/PlotModal';
+import ResourceZone from '../components/ResourceZone';
+import Advisor from '../components/Advisor';
 import ShieldPanel from '../components/ShieldPanel';
 
-// Площадки на террасах склона (сцена 1000×680). scale — псевдо-глубина.
-const PLOTS: Record<Exclude<BuildingId, 'castle'>, { x: number; y: number; s: number }> = {
-  temple:     { x: 338, y: 232, s: 1.5 },
-  embassy:    { x: 662, y: 232, s: 1.5 },
-  lumberMill: { x: 210, y: 372, s: 1.75 },
-  academy:    { x: 792, y: 372, s: 1.75 },
-  ironMine:   { x: 122, y: 486, s: 1.95 },
-  silverMine: { x: 878, y: 486, s: 1.95 },
-  farm:       { x: 300, y: 588, s: 2.1 },
-  barracks:   { x: 700, y: 588, s: 2.1 },
-  tavern:     { x: 500, y: 628, s: 2.15 },
+// Сервисные постройки на террасах склона (ресурсные добытчики теперь в ресурсной зоне).
+// Сцена 1000×680, scale — псевдо-глубина.
+type ServiceBuildingId = 'temple' | 'embassy' | 'academy' | 'barracks' | 'tavern';
+const PLOTS: Record<ServiceBuildingId, { x: number; y: number; s: number }> = {
+  temple:   { x: 338, y: 232, s: 1.5 },
+  embassy:  { x: 662, y: 232, s: 1.5 },
+  academy:  { x: 210, y: 388, s: 1.8 },
+  barracks: { x: 792, y: 388, s: 1.8 },
+  tavern:   { x: 500, y: 600, s: 2.15 },
 };
 
 export default function KingdomView() {
   const s = useGame();
+  const a = useGame((st) => st.actions);
   const [openBuilding, setOpenBuilding] = useState<BuildingId | null>(null);
+  const [openPlot, setOpenPlot] = useState<number | null>(null);
   const [shieldOpen, setShieldOpen] = useState(false);
   const now = Date.now();
   const f = FACTIONS[s.faction];
   const shielded = s.shieldUntil > now;
   const castleBuild = s.buildQueue.find((t) => t.building === 'castle');
+  const choosing = !s.onboarded && s.tutorialStep === 'choose';
 
   return (
-    <div className="view-scroll">
-      <div className="kingdom-svg-wrap card" style={{ padding: 4, overflow: 'hidden' }}>
+    <div className={`view-scroll ${s.tutorialStep ? 'tut-active' : ''}`}>
+      {choosing && <div className="tut-overlay" />}
+      <div className={`kingdom-svg-wrap card ${choosing ? 'tut-dim' : ''}`} style={{ padding: 4, overflow: 'hidden' }}>
         <svg viewBox="0 0 1000 680" xmlns="http://www.w3.org/2000/svg">
           <defs>
             <CommonDefs />
@@ -140,8 +145,11 @@ export default function KingdomView() {
         </svg>
       </div>
 
+      {/* ресурсная зона: 12 участков под кастомную застройку */}
+      <ResourceZone choosing={choosing} onOpenPlot={(i) => setOpenPlot(i)} />
+
       {/* панель действий */}
-      <div className="row" style={{ gap: 10, flexWrap: 'wrap' }}>
+      <div className={`row ${choosing ? 'tut-dim' : ''}`} style={{ gap: 10, flexWrap: 'wrap' }}>
         <button className="btn ghost" onClick={() => setShieldOpen(true)}>
           🛡 Щиты {shielded ? `(${fmtDuration(s.shieldUntil - now)})` : ''}
         </button>
@@ -166,7 +174,18 @@ export default function KingdomView() {
 
       <AnimatePresence>
         {openBuilding && <BuildingModal building={openBuilding} onClose={() => setOpenBuilding(null)} />}
+        {openPlot !== null && <PlotModal index={openPlot} onClose={() => setOpenPlot(null)} />}
         {shieldOpen && <ShieldPanel onClose={() => setShieldOpen(false)} />}
+      </AnimatePresence>
+
+      {/* стартовый онбординг советника */}
+      <AnimatePresence>
+        {s.tutorialStep === 'intro' && (
+          <Advisor key="intro" text={ADVISOR.intro} cta="К делу!" onNext={() => a.advanceTutorial()} />
+        )}
+        {s.tutorialStep === 'finish' && (
+          <Advisor key="finish" text={ADVISOR.finish} cta="Вперёд!" onNext={() => a.advanceTutorial()} />
+        )}
       </AnimatePresence>
     </div>
   );
@@ -264,7 +283,7 @@ function ConstructionBadge({ x, y, startedAt, endsAt, now }: { x: number; y: num
   );
 }
 
-function BuildingPlot({ id, onClick }: { id: Exclude<BuildingId, 'castle'>; onClick: () => void }) {
+function BuildingPlot({ id, onClick }: { id: ServiceBuildingId; onClick: () => void }) {
   const s = useGame();
   const now = Date.now();
   const { x, y, s: scale } = PLOTS[id];

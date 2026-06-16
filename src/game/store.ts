@@ -4,6 +4,7 @@ import {
   BUILDINGS, CAMP_SEEDS, DAILY_QUESTS, EMBASSY_COOLDOWN_H, EMBASSY_HELP_MIN_PER_LVL,
   FACTIONS, FACTION_CHANGE_COST, FREE_SHIELD_COOLDOWN_H, ITEM_DEFS, LOTTERY_PRIZES,
   PLAYER_POS, PLAYER_RAID_SAFE_POWER, RECON_COST_SILVER, RECON_MAX_S, RECON_MIN_S, RESEARCH,
+  RESOURCE_BUILDING_IDS, RESOURCE_ZONE_SIZE,
   SHIELDS, SPEEDUP_GOLD_PER_MIN, SPY_COST_SILVER, SPY_MIN_S, START_INVENTORY, START_RESOURCES,
   TELEPORT_COST_GOLD, TEMPLE_COOLDOWN_H,
 } from './config';
@@ -20,7 +21,7 @@ import {
 } from './paragon';
 import type {
   BattleReport, Bot, BuildingId, Camp, EnemySnapshot, FactionId, GameState, LogEntry,
-  MarchTask, ResearchId, Resource, Resources, ScoutKind, TargetKind,
+  MarchTask, ResearchId, Resource, ResourceBuildingId, ResourcePlot, Resources, ScoutKind, TargetKind,
 } from './types';
 
 const SAVE_KEY = 'march-of-empires-save-v1';
@@ -42,6 +43,9 @@ interface Actions {
   tick: (now: number) => void;
   startGame: (faction: FactionId, name: string) => void;
   startUpgrade: (b: BuildingId) => void;
+  buildPlot: (plotIndex: number, type: ResourceBuildingId) => void;
+  upgradePlot: (plotIndex: number) => void;
+  advanceTutorial: () => void;
   startResearch: (r: ResearchId) => void;
   trainUnits: (unitId: string, count: number) => void;
   speedUp: (queue: 'build' | 'research' | 'train', id: string) => void;
@@ -102,6 +106,23 @@ function findTarget(s: GameState, id: string): { kind: TargetKind; bot?: Bot; ca
   return null;
 }
 
+/** Пустая ресурсная зона: ровно RESOURCE_ZONE_SIZE свободных участков. */
+export function emptyResourceZone(): ResourcePlot[] {
+  return Array.from({ length: RESOURCE_ZONE_SIZE }, () => ({ type: null, level: 0 }));
+}
+
+/** Миграция старого сейва: переносим прежние ресурсные здания на участки зоны. */
+function zoneFromLegacy(buildings?: Partial<Record<BuildingId, number>>): ResourcePlot[] {
+  const zone = emptyResourceZone();
+  if (!buildings) return zone;
+  let i = 0;
+  for (const id of RESOURCE_BUILDING_IDS) {
+    const lvl = buildings[id] ?? 0;
+    if (lvl > 0 && i < zone.length) zone[i++] = { type: id, level: lvl };
+  }
+  return zone;
+}
+
 export function freshState(now: number): GameState {
   return {
     started: false,
@@ -109,9 +130,12 @@ export function freshState(now: number): GameState {
     faction: 'highland',
     resources: { ...START_RESOURCES },
     buildings: {
-      castle: 1, farm: 1, ironMine: 1, lumberMill: 1, silverMine: 1,
+      castle: 1, farm: 0, ironMine: 0, lumberMill: 0, silverMine: 0,
       barracks: 1, academy: 0, temple: 0, tavern: 0, embassy: 0,
     },
+    resourceZone: emptyResourceZone(),
+    onboarded: false,
+    tutorialStep: null,
     research: { economy: 0, construction: 0, attack: 0, defense: 0 },
     army: {},
     buildQueue: [],
@@ -172,6 +196,11 @@ function loadState(): GameState {
         lotteryDate: parsed.lotteryDate ?? '',
         mailSeen: parsed.mailSeen ?? fresh.mailSeen,
         onlinePlaced: parsed.onlinePlaced ?? false,
+        // Ресурсная зона: новые сейвы — как есть; старые — переносим прежние здания на участки.
+        resourceZone: parsed.resourceZone ?? zoneFromLegacy(parsed.buildings),
+        // Туториал уже пройден всеми, у кого был старый сейв (нет поля resourceZone).
+        onboarded: parsed.onboarded ?? (parsed.resourceZone ? false : true),
+        tutorialStep: parsed.tutorialStep ?? null,
       } as GameState;
     }
   } catch (e) {
@@ -230,10 +259,14 @@ function completeQueues(s: GameState, now: number, offline: boolean): BattleRepo
   // Стройки
   for (const t of [...s.buildQueue]) {
     if (t.endsAt <= now) {
-      s.buildings[t.building] = Math.max(s.buildings[t.building] ?? 0, t.targetLevel);
+      if (t.plot !== undefined && s.resourceZone[t.plot]) {
+        s.resourceZone[t.plot] = { type: t.building as ResourceBuildingId, level: t.targetLevel };
+      } else {
+        s.buildings[t.building] = Math.max(s.buildings[t.building] ?? 0, t.targetLevel);
+      }
       s.buildQueue = s.buildQueue.filter((x) => x.id !== t.id);
       addParagon(s, 25 + t.targetLevel * 5);
-      pushLog(s, '🏗️', `${BUILDINGS[t.building].name} достроен до ур. ${t.targetLevel}`, 'build');
+      pushLog(s, '🏗️', `${BUILDINGS[t.building].name} — готово (ур. ${t.targetLevel})`, 'build');
     }
   }
   // Исследования
@@ -666,6 +699,8 @@ export const useGame = create<Store>((set, get) => {
         s.started = true;
         s.faction = faction;
         s.playerName = name.trim() || 'Лорд';
+        s.onboarded = false;
+        s.tutorialStep = 'intro'; // запускаем стартовый онбординг ресурсной зоны
         pushLog(s, '👑', `Добро пожаловать, ${s.playerName}! Империя ${FACTIONS[faction].name} ждёт.`, 'info');
         set({ ...s, pendingReport: null });
         persist(s, true);
@@ -686,6 +721,52 @@ export const useGame = create<Store>((set, get) => {
         const dur = buildingTimeMs(s, def, target);
         s.buildQueue.push({ id: uid(), building: b, targetLevel: target, startedAt: now, endsAt: now + dur });
         addQuestProgress(s, 'upgrade');
+      }),
+
+      // Постройка нового ресурсного здания на пустом участке зоны (любой тип).
+      buildPlot: (plotIndex, type) => mutate((s) => {
+        const plot = s.resourceZone[plotIndex];
+        if (!plot || plot.type) return;                  // участок должен быть пуст
+        if (!RESOURCE_BUILDING_IDS.includes(type)) return;
+        if (s.buildQueue.length >= 1) return;            // 1 слот стройки
+        const def = BUILDINGS[type];
+        const cost = buildingCost(def, 1);
+        if (!canAfford(s.resources, cost)) return;
+        for (const [r, v] of Object.entries(cost)) s.resources[r as Resource] -= v as number;
+        const now = Date.now();
+        // Шаг 4 онбординга: первая постройка возводится мгновенно (0 секунд).
+        const tutorialBuild = !s.onboarded && s.tutorialStep === 'choose';
+        const dur = tutorialBuild ? 0 : buildingTimeMs(s, def, 1);
+        s.buildQueue.push({ id: uid(), building: type, plot: plotIndex, targetLevel: 1, startedAt: now, endsAt: now + dur });
+        addQuestProgress(s, 'upgrade');
+        if (tutorialBuild) {
+          completeQueues(s, now, false); // мгновенная достройка
+          s.tutorialStep = 'finish';     // переходим к финальной реплике советника
+        }
+      }),
+
+      // Улучшение уже стоящего на участке здания на +1 уровень (кап по Замку).
+      upgradePlot: (plotIndex) => mutate((s) => {
+        const plot = s.resourceZone[plotIndex];
+        if (!plot || !plot.type) return;
+        const def = BUILDINGS[plot.type];
+        const target = plot.level + 1;
+        if (target > def.maxLevel) return;
+        if (target > (s.buildings.castle ?? 1)) return;  // кап по Замку
+        if (s.buildQueue.length >= 1) return;
+        const cost = buildingCost(def, target);
+        if (!canAfford(s.resources, cost)) return;
+        for (const [r, v] of Object.entries(cost)) s.resources[r as Resource] -= v as number;
+        const now = Date.now();
+        const dur = buildingTimeMs(s, def, target);
+        s.buildQueue.push({ id: uid(), building: plot.type, plot: plotIndex, targetLevel: target, startedAt: now, endsAt: now + dur });
+        addQuestProgress(s, 'upgrade');
+      }),
+
+      // Переход между шагами стартового онбординга.
+      advanceTutorial: () => mutate((s) => {
+        if (s.tutorialStep === 'intro') s.tutorialStep = 'choose';
+        else if (s.tutorialStep === 'finish') { s.tutorialStep = null; s.onboarded = true; }
       }),
 
       startResearch: (r) => mutate((s) => {

@@ -1169,3 +1169,101 @@ h1.title {
 ::-webkit-scrollbar { width: 8px; }
 ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 4px; }
 ::-webkit-scrollbar-track { background: transparent; }
+
+/* ---------- Ресурсная зона ---------- */
+.rz-card { position: relative; }
+.rz-card h3 { font-size: 15px; display: flex; align-items: center; gap: 8px; }
+.rz-hint {
+  text-align: center; font-size: 13px; color: var(--gold-lt);
+  margin-bottom: 8px; animation: rz-bob 1.2s ease-in-out infinite;
+}
+@keyframes rz-bob { 0%,100% { transform: translateY(0); } 50% { transform: translateY(-3px); } }
+
+.rz-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 8px;
+}
+@media (max-width: 420px) { .rz-grid { grid-template-columns: repeat(3, 1fr); } }
+
+.rz-cell {
+  position: relative;
+  display: flex; flex-direction: column; align-items: center; justify-content: flex-end;
+  aspect-ratio: 1 / 1;
+  background: radial-gradient(120% 90% at 50% 25%, #28323f 0%, #1a212b 100%);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 4px;
+  cursor: pointer;
+  font-family: inherit;
+  color: var(--text);
+  overflow: hidden;
+  transition: filter 0.15s, transform 0.1s, border-color 0.15s;
+}
+.rz-cell:hover:not(:disabled) { filter: brightness(1.12); border-color: #4f7ec0; }
+.rz-cell:active:not(:disabled) { transform: scale(0.97); }
+.rz-cell.locked { opacity: 0.4; cursor: default; filter: grayscale(0.5); }
+.rz-cell.empty {
+  border-style: dashed;
+  background: repeating-linear-gradient(45deg, #1c232e 0 6px, #1f2630 6px 12px);
+}
+.rz-plus { font-size: 26px; color: var(--muted); margin: auto; }
+.rz-cell.pulse {
+  border: 2px solid var(--gold);
+  box-shadow: 0 0 0 0 rgba(245,197,66,0.55);
+  animation: rz-pulse 1.3s ease-out infinite;
+  opacity: 1;
+}
+@keyframes rz-pulse {
+  0% { box-shadow: 0 0 0 0 rgba(245,197,66,0.5); }
+  70% { box-shadow: 0 0 0 12px rgba(245,197,66,0); }
+  100% { box-shadow: 0 0 0 0 rgba(245,197,66,0); }
+}
+.rz-glyph { width: 100%; height: 70%; margin-top: 2px; }
+.rz-lvl {
+  position: absolute; top: 4px; right: 5px;
+  min-width: 17px; text-align: center;
+  background: #0d1320; border: 1px solid var(--border); border-radius: 9px;
+  font-size: 11px; font-weight: 700; color: var(--gold-lt); padding: 0 4px;
+}
+.rz-rate { font-size: 10.5px; color: var(--green); font-weight: 600; white-space: nowrap; }
+.rz-build { font-size: 10.5px; color: var(--gold-lt); width: 100%; text-align: center; }
+.rz-build .progress-bar { height: 5px; margin-top: 3px; }
+
+/* выбор здания в окне участка */
+.rz-pick { display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px; margin-bottom: 6px; }
+.rz-pick-opt {
+  display: flex; flex-direction: column; align-items: center; gap: 2px;
+  background: var(--panel2); border: 1px solid var(--border); border-radius: 10px;
+  padding: 8px 6px; cursor: pointer; font-family: inherit; color: var(--text);
+  transition: border-color 0.15s, background 0.15s;
+}
+.rz-pick-opt:hover { border-color: #4f7ec0; }
+.rz-pick-opt.sel { border-color: var(--gold); background: #2a2920; box-shadow: 0 0 0 1px var(--gold) inset; }
+.rz-pick-ico { font-size: 22px; }
+.rz-pick-name { font-size: 12.5px; font-weight: 600; }
+.rz-pick-rate { font-size: 11px; color: var(--green); }
+
+/* ---------- Онбординг: затемнение и фокус ---------- */
+.tut-overlay {
+  position: fixed; inset: 0;
+  background: rgba(5, 8, 12, 0.74);
+  z-index: 90;
+  backdrop-filter: blur(1.5px);
+}
+.tut-dim { opacity: 0.35; pointer-events: none; filter: grayscale(0.4); }
+.rz-focus {
+  position: relative; z-index: 96;
+  box-shadow: 0 0 0 2px var(--gold), 0 18px 50px rgba(0,0,0,0.6);
+}
+
+/* ---------- Советник ---------- */
+.advisor-backdrop { z-index: 120; }
+.advisor { width: min(400px, 92vw); border-color: var(--gold-dk); }
+.advisor-head { display: flex; align-items: center; gap: 8px; margin-bottom: 10px; }
+.advisor-face { font-size: 30px; }
+.advisor-head b { font-family: var(--serif); font-size: 17px; color: var(--gold-lt); }
+.advisor-text {
+  font-size: 14.5px; line-height: 1.5; font-style: italic;
+  color: var(--parch); margin-bottom: 14px;
+}

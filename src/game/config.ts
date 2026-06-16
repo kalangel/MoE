@@ -1,4 +1,4 @@
-import type { BuildingDef, BuildingId, FactionDef, FactionId, Resource } from './types';
+import type { BuildingDef, BuildingId, FactionDef, FactionId, Resource, ResourceBuildingId } from './types';
 import { FACTION_UNITS } from './units';
 
 export const RESOURCE_META: Record<Resource, { name: string; icon: string; color: string }> = {
@@ -143,6 +143,18 @@ export const BUILD_ORDER: BuildingId[] = [
   'castle', 'farm', 'ironMine', 'lumberMill', 'silverMine',
   'barracks', 'academy', 'temple', 'tavern', 'embassy',
 ];
+
+// ---- Ресурсная зона ----
+/** Сколько участков в стартовой ресурсной зоне. */
+export const RESOURCE_ZONE_SIZE = 12;
+/** Здания, которые можно ставить на любой участок (полный кастом, без ограничений). */
+export const RESOURCE_BUILDING_IDS: ResourceBuildingId[] = ['farm', 'lumberMill', 'ironMine', 'silverMine'];
+
+/** Реплики советника в стартовом онбординге. */
+export const ADVISOR = {
+  intro: 'Замок пуст, а рабочие бьют баклуши. Заложи основу нашей экономики.',
+  finish: 'Производство запущено. В твоём распоряжении ещё 11 участков — застраивай их с умом, исходя из своей стратегии.',
+};
 
 // ---- Щиты ----
 export interface ShieldDef {

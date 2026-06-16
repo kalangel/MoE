@@ -1,4 +1,4 @@
-import { BUILDINGS, FACTIONS } from './config';
+import { BUILDINGS, FACTIONS, RESOURCE_BUILDING_IDS } from './config';
 import { HOUR, fmt, powerBreakdown } from './balance';
 import { freshState, saveNow, useGame } from './store';
 import { useOnlineStore } from '../online/onlineStore';
@@ -315,9 +315,14 @@ export async function execCommand(raw: string): Promise<ConsoleLine[]> {
       mutate((s) => {
         for (const r of RESOURCE_IDS) s.resources[r] = 999_999;
         for (const id of Object.keys(BUILDINGS) as BuildingId[]) s.buildings[id] = BUILDINGS[id].maxLevel;
+        // Ресурсная зона: каждый участок застраиваем максимальным зданием.
+        for (let i = 0; i < s.resourceZone.length; i++) {
+          const type = s.resourceZone[i].type ?? RESOURCE_BUILDING_IDS[i % RESOURCE_BUILDING_IDS.length];
+          s.resourceZone[i] = { type, level: BUILDINGS[type].maxLevel };
+        }
         for (const u of FACTIONS[s.faction].units) s.army[u.id] = (s.army[u.id] ?? 0) + 500;
       });
-      return out(['⚡ Режим бога: 999 999 ресурсов, здания макс., +500 каждого юнита.']);
+      return out(['⚡ Режим бога: 999 999 ресурсов, здания макс., ресурсная зона застроена, +500 каждого юнита.']);
     }
 
     case 'reset': {

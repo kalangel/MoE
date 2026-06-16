@@ -7,6 +7,18 @@ export type BuildingId =
   | 'castle' | 'farm' | 'ironMine' | 'lumberMill' | 'silverMine'
   | 'barracks' | 'academy' | 'temple' | 'tavern' | 'embassy';
 
+/** Здания-производители, которые игрок ставит на участки ресурсной зоны. */
+export type ResourceBuildingId = 'farm' | 'ironMine' | 'lumberMill' | 'silverMine';
+
+/** Один участок (plot) ресурсной зоны: пустой (type=null) либо застроенный. */
+export interface ResourcePlot {
+  type: ResourceBuildingId | null;
+  level: number;
+}
+
+/** Шаги стартового онбординга ресурсной зоны. */
+export type TutorialStep = 'intro' | 'choose' | 'finish';
+
 export type ResearchId = 'economy' | 'construction' | 'attack' | 'defense';
 
 export type UnitClass = 'sword' | 'spear' | 'cavalry' | 'ranged' | 'siege' | 'shadow';
@@ -63,6 +75,8 @@ export interface QueueItem {
 export interface BuildTask extends QueueItem {
   building: BuildingId;
   targetLevel: number;
+  /** Если задан — стройка относится к участку ресурсной зоны (resourceZone[plot]). */
+  plot?: number;
 }
 
 export interface ResearchTask extends QueueItem {
@@ -183,6 +197,9 @@ export interface GameState {
   faction: FactionId;
   resources: Resources;
   buildings: Record<BuildingId, number>;
+  resourceZone: ResourcePlot[];   // 12 участков ресурсной зоны
+  onboarded: boolean;             // стартовый туториал пройден
+  tutorialStep: TutorialStep | null; // активный шаг онбординга (null = не активен)
   research: Record<ResearchId, number>;
   army: Record<string, number>;
   buildQueue: BuildTask[];

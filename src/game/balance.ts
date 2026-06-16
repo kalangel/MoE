@@ -1,7 +1,7 @@
-import { BUILDINGS, CAMP_REGEN_H, FACTIONS, RESEARCH, MARCH_SECONDS_PER_100PX, BOT_REGEN_H } from './config';
+import { BUILDINGS, CAMP_REGEN_H, FACTIONS, RESEARCH, MARCH_SECONDS_PER_100PX, BOT_REGEN_H, RESOURCE_BUILDING_IDS } from './config';
 import { unitById } from './units';
 import { paragonMultipliers, paragonSpent } from './paragon';
-import type { Bot, BuildingDef, BuildingId, Camp, GameState, Resource, Resources, UnitDef } from './types';
+import type { Bot, BuildingDef, BuildingId, Camp, GameState, Resource, ResourceBuildingId, Resources, UnitDef } from './types';
 
 export const HOUR = 3600_000;
 
@@ -43,11 +43,12 @@ export function productionPerHour(s: GameState, now: number): Resources {
   const bless = s.blessing?.incomeMult && s.blessing.endsAt > now ? s.blessing.incomeMult : 1;
   const paragon = 1 + paragonMultipliers(s).income;
   const out: Resources = { iron: 0, wood: 0, silver: 0, food: 0, gold: 0 };
-  for (const def of Object.values(BUILDINGS)) {
+  // Добыча идёт с застроенных участков ресурсной зоны (любое число копий каждого типа).
+  for (const plot of s.resourceZone ?? []) {
+    if (!plot.type || plot.level <= 0) continue;
+    const def = BUILDINGS[plot.type];
     if (!def.produces || !def.baseRate) continue;
-    const lvl = s.buildings[def.id] ?? 0;
-    if (lvl <= 0) continue;
-    const rate = def.baseRate * Math.pow(def.rateGrowth ?? 1.45, lvl - 1);
+    const rate = def.baseRate * Math.pow(def.rateGrowth ?? 1.45, plot.level - 1);
     const factionMult = f.incomeBonus[def.produces] ?? 1;
     out[def.produces] += rate * factionMult * economy * bless * paragon;
   }
@@ -106,7 +107,11 @@ export function powerBreakdown(s: GameState): Record<string, number> {
   const now = Date.now();
   const army = Math.round(armyAttack(s, s.army, now) + armyDefense(s, s.army, now));
   let cityLvls = 0;
-  for (const id of Object.keys(BUILDINGS) as BuildingId[]) cityLvls += s.buildings[id] ?? 0;
+  for (const id of Object.keys(BUILDINGS) as BuildingId[]) {
+    if (RESOURCE_BUILDING_IDS.includes(id as ResourceBuildingId)) continue; // считаем по зоне
+    cityLvls += s.buildings[id] ?? 0;
+  }
+  for (const plot of s.resourceZone ?? []) cityLvls += plot.level;
   const city = cityLvls * 140;
   let resLvls = 0;
   for (const r of Object.values(s.research)) resLvls += r;
