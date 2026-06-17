@@ -1009,8 +1009,8 @@ export const useGame = create<Store>((set, get) => {
       researchAcademy: (nodeId) => mutate((s) => {
         const node = academyNode(nodeId);
         if (!node) return;
-        if ((s.buildings.castle ?? 1) < node.era + 1) return;          // эра не открыта
-        if (!academyEraUnlocked(node.era, s.buildings.castle ?? 1)) return;
+        if ((s.buildings.academy ?? 0) < 1) return;                   // нужна построенная Академия
+        if (!academyEraUnlocked(node.era, s.buildings.castle ?? 1)) return; // эра по уровню Замка
         const cur = s.academy[nodeId] ?? 0;
         if (cur >= ACADEMY_NODE_MAX) return;
         if (!academyNodeUnlocked(node, s.academy)) return;              // нужен предыдущий узел

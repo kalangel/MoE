@@ -24,11 +24,11 @@ export interface AcademyEra {
   unlockCastle: number; // Замок для открытия эры
 }
 export const ACADEMY_ERAS: AcademyEra[] = [
-  { n: 1, roman: 'I', name: 'Заря', lore: 'Лёгкие дружины снимаются с места стремительно — марши самые быстрые.', unlockCastle: 2 },
-  { n: 2, roman: 'II', name: 'Восход', lore: 'Войска тяжелеют — походы чуть медленнее, но строй крепче.', unlockCastle: 3 },
-  { n: 3, roman: 'III', name: 'Расцвет', lore: 'Колонны растут, обозы полнятся — темп марша падает.', unlockCastle: 4 },
-  { n: 4, roman: 'IV', name: 'Доминация', lore: 'Громоздкие армии движутся неспешно, но сокрушительно.', unlockCastle: 5 },
-  { n: 5, roman: 'V', name: 'Имперский век', lore: 'Современный строй — скорость марша как у нынешних армий.', unlockCastle: 6 },
+  { n: 1, roman: 'I', name: 'Заря', lore: 'Лёгкие дружины снимаются с места стремительно — марши самые быстрые.', unlockCastle: 1 },
+  { n: 2, roman: 'II', name: 'Восход', lore: 'Войска тяжелеют — походы чуть медленнее, но строй крепче.', unlockCastle: 2 },
+  { n: 3, roman: 'III', name: 'Расцвет', lore: 'Колонны растут, обозы полнятся — темп марша падает.', unlockCastle: 3 },
+  { n: 4, roman: 'IV', name: 'Доминация', lore: 'Громоздкие армии движутся неспешно, но сокрушительно.', unlockCastle: 4 },
+  { n: 5, roman: 'V', name: 'Имперский век', lore: 'Современный строй — скорость марша как у нынешних армий.', unlockCastle: 5 },
 ];
 export function academyEra(n: number): AcademyEra {
   return ACADEMY_ERAS[n - 1];

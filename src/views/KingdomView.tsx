@@ -8,6 +8,7 @@ import CastleSVG from '../components/CastleSVG';
 import { CommonDefs, LevelDisc } from '../components/svgKit';
 import BuildingGlyph from '../components/IsoBuilding';
 import BuildingModal from '../components/BuildingModal';
+import { useUI } from '../ui/uiStore';
 import PlotModal from '../components/PlotModal';
 import ResourceZone from '../components/ResourceZone';
 import Advisor from '../components/Advisor';
@@ -27,6 +28,7 @@ const PLOTS: Record<ServiceBuildingId, { x: number; y: number; s: number }> = {
 export default function KingdomView() {
   const s = useGame();
   const a = useGame((st) => st.actions);
+  const openPage = useUI((u) => u.openPage);
   const [openBuilding, setOpenBuilding] = useState<BuildingId | null>(null);
   const [openPlot, setOpenPlot] = useState<number | null>(null);
   const [shieldOpen, setShieldOpen] = useState(false);
@@ -43,14 +45,14 @@ export default function KingdomView() {
           <defs>
             <CommonDefs />
             <linearGradient id="kSky" x1="0" y1="0" x2="0" y2="1">
-              <stop offset="0" stopColor="#121a26" />
-              <stop offset="0.6" stopColor="#1d2a3a" />
-              <stop offset="1" stopColor="#33414f" />
+              <stop offset="0" stopColor="#a9d0f0" />
+              <stop offset="0.6" stopColor="#cfe6f5" />
+              <stop offset="1" stopColor="#e9f1e2" />
             </linearGradient>
             <radialGradient id="kMoon" cx="0.5" cy="0.5" r="0.5">
-              <stop offset="0" stopColor="#f3ecd2" stopOpacity="0.9" />
-              <stop offset="0.4" stopColor="#cdd2c8" stopOpacity="0.5" />
-              <stop offset="1" stopColor="#cdd2c8" stopOpacity="0" />
+              <stop offset="0" stopColor="#fff3c0" stopOpacity="0.95" />
+              <stop offset="0.4" stopColor="#ffe48a" stopOpacity="0.5" />
+              <stop offset="1" stopColor="#ffe48a" stopOpacity="0" />
             </radialGradient>
             <linearGradient id="kWater" x1="0" y1="0" x2="0" y2="1">
               <stop offset="0" stopColor="#1f3d52" />
@@ -60,8 +62,8 @@ export default function KingdomView() {
 
           {/* небо */}
           <rect width="1000" height="300" fill="url(#kSky)" />
-          <circle cx="820" cy="90" r="70" fill="url(#kMoon)" />
-          <circle cx="820" cy="90" r="26" fill="#eef0e2" opacity="0.92" />
+          <circle cx="820" cy="90" r="80" fill="url(#kMoon)" />
+          <circle cx="820" cy="90" r="28" fill="#ffe27a" opacity="0.95" />
           {STARS.map((p, i) => (
             <circle key={i} className={`sparkle ${i % 3 === 1 ? 'd2' : i % 3 === 2 ? 'd3' : ''}`}
               cx={p[0]} cy={p[1]} r={p[2]} fill="#cdd6e0" />
@@ -139,7 +141,11 @@ export default function KingdomView() {
 
           {/* постройки */}
           {(Object.keys(PLOTS) as (keyof typeof PLOTS)[]).map((id) => (
-            <BuildingPlot key={id} id={id} onClick={() => setOpenBuilding(id)} />
+            <BuildingPlot
+              key={id}
+              id={id}
+              onClick={() => (id === 'academy' ? openPage('research') : setOpenBuilding(id))}
+            />
           ))}
         </svg>
       </div>

@@ -11,7 +11,6 @@ import MapTopPanel from './components/MapTopPanel';
 import MapButton from './components/MapButton';
 import FactionSelect from './components/FactionSelect';
 import BattleReportModal from './components/BattleReportModal';
-import Toasts from './components/Toasts';
 import DevConsole from './components/DevConsole';
 import KingdomView from './views/KingdomView';
 import MapView from './views/MapView';
@@ -89,7 +88,6 @@ export default function App() {
       <BottomNav />
       <AnimatePresence>{ui.mapWindow && <MapWindowRouter key={ui.mapWindow} />}</AnimatePresence>
       <BattleReportModal />
-      <Toasts />
       <DevConsole />
     </div>
   );
