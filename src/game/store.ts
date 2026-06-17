@@ -74,6 +74,7 @@ interface Actions {
   claimQuest: (questId: string) => void;
   changeFaction: (f: FactionId) => void;
   dismissReport: () => void;
+  clearReports: () => void;
   spendParagon: (nodeId: string) => void;
   resetParagon: () => void;
   useParagonAbility: (abilityId: string) => void;
@@ -260,8 +261,8 @@ function persist(s: GameState, force = false) {
   localStorage.setItem(SAVE_KEY, JSON.stringify(data));
 }
 
-function pushLog(s: GameState, icon: string, text: string, kind: LogEntry['kind'], at = Date.now()) {
-  s.log = [{ id: uid(), at, icon, text, kind }, ...s.log].slice(0, 30);
+function pushLog(s: GameState, icon: string, text: string, kind: LogEntry['kind'], at = Date.now(), side?: LogEntry['side']) {
+  s.log = [{ id: uid(), at, icon, text, kind, ...(side ? { side } : {}) }, ...s.log].slice(0, 40);
 }
 
 /** Хроника королевства — события мира ботов (бегущая строка на карте). */
@@ -589,7 +590,7 @@ function completeScout(s: GameState, targetId: string, kind: ScoutKind, at: numb
     const detectChance = Math.min(0.6, 0.08 + level * 0.06);
     if (Math.random() < detectChance) {
       s.stats.lostSpies += 1;
-      pushLog(s, '🕵️', `Шпион в ${name} обнаружен! Доклад не получен.`, 'info', at);
+      pushLog(s, '🕵️', `Шпион в ${name} обнаружен! Доклад не получен.`, 'scout', at, 'own');
       return;
     }
     s.spyReports[targetId] = {
@@ -601,7 +602,7 @@ function completeScout(s: GameState, targetId: string, kind: ScoutKind, at: numb
       shielded: isCamp ? false : target.bot!.shieldUntil > at,
       defenseBonus: 10 + level * 5,
     };
-    pushLog(s, '🕵️', `Шпион вернулся из ${name}: точный доклад получен.`, 'info', at);
+    pushLog(s, '🕵️', `Шпион вернулся из ${name}: точный доклад получен.`, 'scout', at, 'own');
   } else {
     // Разведка: грубая оценка (±25%), округление
     const accuracy = 0.25;
@@ -612,7 +613,7 @@ function completeScout(s: GameState, targetId: string, kind: ScoutKind, at: numb
       composition: compositionCounts(realPower, comp),
       resources: roughResources(campOrBotLoot(level, isCamp)),
     };
-    pushLog(s, '🔭', `Разведка ${name}: сила ≈ ${est}.`, 'info', at);
+    pushLog(s, '🔭', `Разведка ${name}: сила ≈ ${est}.`, 'scout', at, 'own');
   }
 }
 
@@ -683,6 +684,20 @@ function botActStep(s: GameState, now: number) {
     }
   } else if (roll < 0.85) {
     pushChronicle(s, '🌾', `${attacker.name} фермит ресурсные точки`, now);
+  }
+
+  // 4) Чужой шпион изредка прощупывает замок игрока (для вкладки «Разведка», красным)
+  if (!s.started) return;
+  if (Math.random() < 0.14) {
+    const spy = s.bots[Math.floor(Math.random() * s.bots.length)];
+    const tavern = s.buildings.tavern ?? 0;
+    // Шанс поимки растёт от уровня Таверны (контрразведка)
+    const caught = Math.random() < Math.min(0.7, 0.2 + tavern * 0.08);
+    if (caught) {
+      pushLog(s, '🕵️', `Шпион лорда ${spy.name} пойман у твоих стен и казнён.`, 'scout', now, 'enemy');
+    } else {
+      pushLog(s, '🕵️', `Шпион лорда ${spy.name} разведал твой замок. Усиль Таверну.`, 'scout', now, 'enemy');
+    }
   }
 }
 
@@ -1045,7 +1060,7 @@ export const useGame = create<Store>((set, get) => {
         s.stats.scoutsSent += 1;
         addQuestProgress(s, 'spy');
         const label = target.kind === 'camp' ? campName(target.camp!.level) : `замок ${target.bot!.name}`;
-        pushLog(s, kind === 'spy' ? '🕵️' : '🔭', `${kind === 'spy' ? 'Шпион' : 'Разведотряд'} отправлен в ${label}…`, 'info');
+        pushLog(s, kind === 'spy' ? '🕵️' : '🔭', `${kind === 'spy' ? 'Шпион' : 'Разведотряд'} отправлен в ${label}…`, 'scout', now, 'own');
       }),
 
       sendAttack: (targetId, units, formationId) => mutate((s) => {
@@ -1139,6 +1154,11 @@ export const useGame = create<Store>((set, get) => {
       }),
 
       dismissReport: () => set({ pendingReport: null }),
+
+      // Очистить донесения (бои/рейды/разведка) — для вкладок «Армия».
+      clearReports: () => mutate((s) => {
+        s.log = s.log.filter((e) => e.kind !== 'battle' && e.kind !== 'raid' && e.kind !== 'scout');
+      }),
 
       spendParagon: (nodeId) => mutate((s) => {
         if ((s.buildings.castle ?? 1) < PARAGON_CASTLE_REQ) return;

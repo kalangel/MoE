@@ -171,7 +171,8 @@ export interface LogEntry {
   at: number;
   icon: string;
   text: string;
-  kind: 'battle' | 'raid' | 'build' | 'info' | 'gold';
+  kind: 'battle' | 'raid' | 'build' | 'info' | 'gold' | 'scout';
+  side?: 'own' | 'enemy';   // для разведки: чей шпион (свой — зелёный, чужой — красный)
 }
 
 export interface BattleReport {

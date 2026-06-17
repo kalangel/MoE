@@ -13,7 +13,7 @@ export default function Toasts() {
   useEffect(() => {
     if (!mounted.current) { mounted.current = true; return; }
     // Показываем только важные события (атаки/рейды/золото). Спам про еду/стройку/найм — без тостов.
-    const ALLOWED = new Set(['battle', 'raid', 'gold']);
+    const ALLOWED = new Set(['battle', 'raid', 'gold', 'scout']);
     const incoming = log.filter((e) => !seen.current.has(e.id));
     for (const e of incoming) seen.current.add(e.id);
     const fresh = incoming.filter((e) => ALLOWED.has(e.kind));
