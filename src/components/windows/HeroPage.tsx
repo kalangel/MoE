@@ -3,11 +3,11 @@ import { useGame } from '../../game/store';
 import { fmt, fmtDuration } from '../../game/balance';
 import {
   EQUIP_SLOTS, EXPEDITIONS, EXPEDITION_CASTLE_REQ, HERO_BRANCH_META, HERO_LIST, HERO_RESET_COST_GOLD,
-  HEROES, RARITY_META, activeHero, expeditionDef, gearDef, heroAttributes, heroAvailablePoints,
+  HEROES, RARITY_META, activeHero, expeditionDef, heroAttributes, heroAvailablePoints,
   heroBranchNodes, heroBuffs, heroCurrentEnergy, heroEnergyMax, heroLevelInfo, heroNodeCost,
-  heroNodeUnlocked, unlockedHeroes, type HeroTalentBranch,
+  heroNodeUnlocked, slotAccepts, unlockedHeroes, type HeroTalentBranch,
 } from '../../game/hero';
-import type { EquipSlot, HeroBuffKey, HeroId } from '../../game/types';
+import type { EquipSlot, HeroBuffKey, HeroGearItem, HeroId } from '../../game/types';
 import Page, { SectionTitle } from '../Page';
 
 type Tab = 'overview' | 'talents' | 'forge' | 'expeditions';
@@ -27,7 +27,7 @@ const BUFF_LABEL: Record<HeroBuffKey, string> = {
 
 export default function HeroPage() {
   const s = useGame();
-  const [tab, setTab] = useState<Tab>('overview');
+  const [tab, setTab] = useState<Tab>('forge');
   const selected = s.heroSystem.selected;
   const hero = activeHero(s);
 
@@ -58,9 +58,9 @@ export default function HeroPage() {
       </div>
 
       <div className="hero-tabs">
-        {(['overview', 'talents', 'forge', 'expeditions'] as Tab[]).map((t) => (
+        {(['forge', 'overview', 'talents', 'expeditions'] as Tab[]).map((t) => (
           <button key={t} className={`hero-tab ${tab === t ? 'sel' : ''}`} onClick={() => setTab(t)}>
-            {t === 'overview' ? '📋 Обзор' : t === 'talents' ? '🌳 Таланты' : t === 'forge' ? '⚒️ Кузница' : '🗺️ Походы'}
+            {t === 'forge' ? '🛡️ Экипировка' : t === 'overview' ? '📋 Обзор' : t === 'talents' ? '🌳 Таланты' : '🗺️ Походы'}
           </button>
         ))}
       </div>
@@ -248,39 +248,45 @@ function Talents() {
   );
 }
 
-// ---------------- Кузница (экипировка) ----------------
+// ---------------- Снаряжение: «бумажная кукла» (5 слотов слева + 5 справа) ----------------
 function Forge() {
   const s = useGame();
   const a = useGame((st) => st.actions);
   const hero = activeHero(s)!;
-  const store = s.heroSystem.gearInventory;
+  const arch = HEROES[hero.id];
+  const store = Object.values(s.heroSystem.gearInventory);
   const [sel, setSel] = useState<EquipSlot | null>(null);
 
-  const owned = Object.entries(store).filter(([, n]) => n > 0);
+  const left = EQUIP_SLOTS.filter((x) => x.side === 'left');
+  const right = EQUIP_SLOTS.filter((x) => x.side === 'right');
   const selSlotDef = sel ? EQUIP_SLOTS.find((x) => x.slot === sel) : null;
-  const compatible = selSlotDef
-    ? owned.filter(([gid]) => gearDef(gid)?.slot === selSlotDef.accepts)
-    : [];
+  const compatible = sel ? store.filter((it) => slotAccepts(sel, it)) : [];
+
+  const SlotBtn = ({ slot }: { slot: typeof EQUIP_SLOTS[number] }) => {
+    const item = hero.equipment[slot.slot];
+    return (
+      <button
+        className={`pd-slot ${sel === slot.slot ? 'sel' : ''} ${item ? 'filled' : ''}`}
+        onClick={() => setSel(slot.slot)}
+        style={item ? { ['--rc' as string]: RARITY_META[item.rarity].color } : undefined}
+        title={item ? `${item.name} (${RARITY_META[item.rarity].name})` : slot.name}
+      >
+        <span className="pd-slot-ic">{item ? item.icon : slot.icon}</span>
+        <span className="pd-slot-name">{item ? item.name : slot.name}</span>
+      </button>
+    );
+  };
 
   return (
     <>
-      <SectionTitle>Снаряжение героя</SectionTitle>
-      <div className="forge-slots">
-        {EQUIP_SLOTS.map((slotDef) => {
-          const gid = hero.equipment[slotDef.slot];
-          const def = gid ? gearDef(gid) : null;
-          return (
-            <button
-              key={slotDef.slot}
-              className={`forge-slot ${sel === slotDef.slot ? 'sel' : ''} ${def ? 'filled' : ''}`}
-              onClick={() => setSel(slotDef.slot)}
-              style={def ? { ['--rc' as string]: RARITY_META[def.rarity].color } : undefined}
-            >
-              <span className="forge-slot-ic">{def ? def.icon : slotDef.icon}</span>
-              <span className="forge-slot-name">{def ? def.name : slotDef.name}</span>
-            </button>
-          );
-        })}
+      <div className="paperdoll">
+        <div className="pd-col">{left.map((sl) => <SlotBtn key={sl.slot} slot={sl} />)}</div>
+        <div className="pd-hero" style={{ ['--hc' as string]: arch.color }}>
+          <div className="pd-hero-fig">{arch.icon}</div>
+          <div className="pd-hero-name">{arch.name}</div>
+          <div className="pd-hero-lvl">Ур. {heroLevelInfo(hero.exp).level}</div>
+        </div>
+        <div className="pd-col">{right.map((sl) => <SlotBtn key={sl.slot} slot={sl} />)}</div>
       </div>
 
       {sel && (
@@ -291,20 +297,17 @@ function Forge() {
               ✊ Снять текущий
             </button>
           )}
-          {compatible.length === 0 && <div className="muted">Нет подходящих предметов на складе. Добывай их в Походах.</div>}
-          {compatible.map(([gid, n]) => {
-            const def = gearDef(gid)!;
-            return (
-              <div key={gid} className="wrow" style={{ ['--rc' as string]: RARITY_META[def.rarity].color, borderColor: RARITY_META[def.rarity].color }}>
-                <div className="wr-ic">{def.icon}</div>
-                <div className="wr-main">
-                  <div className="wr-title">{def.name} <span style={{ color: RARITY_META[def.rarity].color, fontSize: 11 }}>{RARITY_META[def.rarity].name}</span> ×{n}</div>
-                  <div className="wr-sub">{gearMods(def.mods)}</div>
-                </div>
-                <button className="btn btn-blue sm" onClick={() => a.equipHeroGear(sel, gid)}>Надеть</button>
+          {compatible.length === 0 && <div className="muted">Нет подходящих предметов. Выбивай экипировку в лагерях варваров на карте.</div>}
+          {compatible.map((it) => (
+            <div key={it.id} className="wrow" style={{ ['--rc' as string]: RARITY_META[it.rarity].color, borderColor: RARITY_META[it.rarity].color }}>
+              <div className="wr-ic">{it.icon}</div>
+              <div className="wr-main">
+                <div className="wr-title">{it.name} <span style={{ color: RARITY_META[it.rarity].color, fontSize: 11 }}>{RARITY_META[it.rarity].name}</span></div>
+                <div className="wr-sub">{gearMods(it.mods)}</div>
               </div>
-            );
-          })}
+              <button className="btn btn-blue sm" onClick={() => a.equipHeroGear(sel, it.id)}>Надеть</button>
+            </div>
+          ))}
         </>
       )}
     </>
@@ -362,7 +365,7 @@ function Expeditions() {
               <div className="wr-title">{e.name} <span className="muted">· ур. {e.minLevel}+ · {e.durationH}ч · ⚡{e.energyCost}</span></div>
               <div className="wr-sub">{e.desc}</div>
               <div className="wr-sub" style={{ color: 'var(--gold-lt)' }}>
-                Награда: +{e.rewards.exp} опыта{e.rewards.gold ? ` · 👑${e.rewards.gold}` : ''}{e.rewards.iron ? ` · ⛏${fmt(e.rewards.iron)}` : ''}{e.rewards.gearPool ? ' · ⚔ шанс снаряжения' : ''}{e.rewards.recruit ? ' · 🦸 шанс героя' : ''}
+                Награда: +{e.rewards.exp} опыта{e.rewards.gold ? ` · 👑${e.rewards.gold}` : ''}{e.rewards.iron ? ` · ⛏${fmt(e.rewards.iron)}` : ''}{e.rewards.gearRarity ? ' · ⚔ шанс снаряжения' : ''}{e.rewards.recruit ? ' · 🦸 шанс героя' : ''}
               </div>
             </div>
             <button className="btn btn-blue sm" disabled={disabled} onClick={() => a.startExpedition(e.id)}>

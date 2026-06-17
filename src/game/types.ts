@@ -197,10 +197,25 @@ export type View = 'kingdom' | 'map' | 'army' | 'research' | 'quests';
 // ============================================================
 export type HeroId = 'economist' | 'commander' | 'logistician' | 'tactician';
 
-/** Слоты экипировки героя (Кузница). Два слота под аксессуары. */
-export type EquipSlot = 'weapon' | 'armor' | 'helmet' | 'boots' | 'acc1' | 'acc2';
-/** Категория предмета (аксессуар ложится в acc1/acc2). */
-export type GearSlot = 'weapon' | 'armor' | 'helmet' | 'boots' | 'accessory';
+/** 10 слотов экипировки героя: слева 5, справа 5. */
+export type EquipSlot =
+  | 'helmet' | 'chest' | 'weapon' | 'ring1' | 'trophy'      // левая колонка
+  | 'gloves' | 'boots' | 'weapon2' | 'ring2' | 'cloak';    // правая колонка
+/** Категория предмета (определяет, в какой слот его можно надеть). */
+export type GearSlot = 'helmet' | 'chest' | 'weapon' | 'ring' | 'trophy' | 'gloves' | 'boots' | 'cloak';
+/** Редкость предмета. */
+export type GearRarity = 'common' | 'rare' | 'epic' | 'legendary';
+
+/** Экземпляр предмета экипировки (генерируется при выпадении). */
+export interface HeroGearItem {
+  id: string;                                   // уникальный id экземпляра
+  name: string;
+  icon: string;
+  slot: GearSlot;
+  rarity: GearRarity;
+  level: number;                                // уровень источника (лагеря)
+  mods: Partial<Record<HeroBuffKey, number>>;   // % бонусы
+}
 
 /**
  * Единый словарь множителей-баффов героя (аддитивные доли, напр. 0.15 = +15%).
@@ -232,7 +247,7 @@ export interface HeroInstance {
   exp: number;                                // суммарный опыт (уровень выводится из него)
   level: number;                              // кэш уровня (синхронизируется с exp)
   talents: Record<string, number>;            // nodeId → ранг
-  equipment: Record<EquipSlot, string | null>; // слот → gearId
+  equipment: Record<EquipSlot, HeroGearItem | null>; // надетые предметы по слотам
   energy: number;                             // текущая энергия героя
   energyAt: number;                           // момент последнего пересчёта энергии
   expedition: HeroExpedition | null;          // активный поход (Sovereign Journey)
@@ -246,7 +261,7 @@ export interface HeroSystemData {
   selected: boolean;        // стартовый выбор сделан → UI выбора заблокирован
   activeId: HeroId | null;  // активный герой (active_hero)
   heroes: HeroCollection;   // разблокированные герои с их прогрессией
-  gearInventory: Record<string, number>; // общий склад снаряжения (gearId → кол-во)
+  gearInventory: Record<string, HeroGearItem>; // склад ненадетых предметов (id → предмет)
 }
 
 export interface GameState {
@@ -260,6 +275,7 @@ export interface GameState {
   tutorialStep: TutorialStep | null; // активный шаг онбординга (null = не активен)
   research: Record<ResearchId, number>;
   academy: Record<string, number>;   // Академия: nodeId → ранг (древо эпох)
+  barbXp: number;                    // Опыт Варваров (открывает уровни лагерей)
   army: Record<string, number>;
   buildQueue: BuildTask[];
   researchQueue: ResearchTask[];

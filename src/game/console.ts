@@ -1,5 +1,5 @@
 import { BUILDINGS, FACTIONS, RESOURCE_BUILDING_IDS } from './config';
-import { HEROES, activeHero, heroEnergyMax, heroLevelInfo, settleHeroEnergy } from './hero';
+import { HEROES, activeHero, emptyEquipment, heroEnergyMax, heroLevelInfo, settleHeroEnergy } from './hero';
 import { HOUR, fmt, powerBreakdown } from './balance';
 import { freshState, saveNow, useGame } from './store';
 import { useOnlineStore } from '../online/onlineStore';
@@ -350,7 +350,7 @@ export async function execCommand(raw: string): Promise<ConsoleLine[]> {
         return out([`Разблокирован герой: ${HEROES[id].name}`]);
       }
       if (sub === 'unlockall') {
-        mutate((s) => { for (const id of heroIds) if (!s.heroSystem.heroes[id]) s.heroSystem.heroes[id] = { id, exp: 0, level: 1, talents: {}, equipment: { weapon: null, armor: null, helmet: null, boots: null, acc1: null, acc2: null }, energy: 100, energyAt: Date.now(), expedition: null }; });
+        mutate((s) => { for (const id of heroIds) if (!s.heroSystem.heroes[id]) s.heroSystem.heroes[id] = { id, exp: 0, level: 1, talents: {}, equipment: emptyEquipment(), energy: 100, energyAt: Date.now(), expedition: null }; });
         return out(['Все герои разблокированы.']);
       }
       if (sub === 'token') {

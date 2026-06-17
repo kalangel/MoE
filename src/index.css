@@ -1583,33 +1583,44 @@ h1.title {
 body { background: #d8c8a3; }
 .app { background: radial-gradient(1200px 520px at 50% -200px, #f3ead2 0%, transparent 70%), var(--bg); }
 
-/* верх/низ — светлое дерево */
+/* ВЕРХ/НИЗ/МЕДАЛЬОНЫ — оставляем тёмное дерево (как было до светлой темы) */
 .topbar, .topband {
-  background: linear-gradient(180deg, #e2cfa3, #cdb079);
-  border-bottom: 3px solid var(--brass);
-  box-shadow: 0 3px 10px rgba(0,0,0,0.18);
+  background: linear-gradient(180deg, #3a2814, #241708);
+  border-bottom: 3px solid #b8923a;
+  box-shadow: 0 3px 12px rgba(0,0,0,0.5), inset 0 -2px 0 rgba(0,0,0,0.4);
 }
 .bottomnav {
-  background: linear-gradient(180deg, #e2cfa3, #cdb079) !important;
-  border-top: 3px solid var(--brass);
-  box-shadow: 0 -4px 12px rgba(0,0,0,0.18), inset 0 2px 0 rgba(255,255,255,0.4);
+  background:
+    repeating-linear-gradient(90deg, rgba(0,0,0,0.18) 0 7px, transparent 7px 14px),
+    linear-gradient(180deg, #4a3219, #2e1f0e 55%, #1c1207) !important;
+  border-top: 3px solid #b8923a;
+  box-shadow: 0 -4px 14px rgba(0,0,0,0.55), inset 0 2px 0 rgba(246,226,160,0.18);
 }
-.res-pill, .timer-chip { background: linear-gradient(180deg, #fbf4e1, #efe3c4); border: 1px solid var(--gold-dk); color: #2c2417; }
-.res-pill .v, .timer-chip .t { color: #2c2417; }
-.res-pill.gold .v { color: var(--gold-lt); }
-.res-pill .rate { color: var(--green); }
-.portrait { background: radial-gradient(circle at 40% 30%, #f0e2bf, #d8c290); box-shadow: 0 0 0 2px var(--gold-dk); }
-.fs-btn { background: linear-gradient(180deg, #f0e2bf, #d8c290); border: 1px solid var(--gold-dk); color: var(--gold-lt); }
-.res-chip { background: #f6efda; border: 1px solid var(--border); color: #2c2417; }
-.res-chip.gold { background: #fbf1d6; border-color: var(--gold); }
-.res-chip.gold .val { color: var(--gold-lt); }
-
-/* медальоны навигации */
+.res-pill, .timer-chip { background: linear-gradient(180deg, #1a130a, #0e0a05); border: 1px solid #7a5c1c; color: #ecdfbe; }
+.res-pill .v, .timer-chip .t { color: #f6e2a0; }
+.res-pill.gold { border-color: #f5c542; }
+.res-pill.gold .v { color: #f6e2a0; }
+.res-pill .rate { color: #58c472; }
+.res-pill .rate.neg { color: #e05858; }
+.portrait { background: radial-gradient(circle at 40% 30%, #4a3a22, #1c130a); box-shadow: 0 0 0 2px #7a5c1c, inset 0 0 6px rgba(0,0,0,0.7); }
+.portrait .lvl { background: linear-gradient(180deg, #f6e2a0, #b8923a); color: #2a1c08; border-color: #7a5c1c; }
+.fs-btn { background: linear-gradient(180deg, #4a3a22, #241708); border: 1px solid #7a5c1c; color: #f6e2a0; }
+.res-chip { background: #141a23; border: 1px solid #344256; color: #e8e2d4; }
+.res-chip.gold { background: #201a10; border-color: #6b5618; }
+.res-chip.gold .val { color: #f5c542; }
+/* портрет-кнопка: крупнее и кликабельна */
+.portrait-btn { cursor: pointer; padding: 0; border: none; width: 52px; height: 52px; font-size: 30px; transition: filter 0.12s, transform 0.1s; }
+.portrait-btn:hover { filter: brightness(1.12); }
+.portrait-btn:active { transform: scale(0.95); }
+.portrait-btn .lvl { font-size: 10px; }
+/* медальоны навигации — тёмные диски, латунный кант, золотая подпись */
 .medallion-disc {
-  background: radial-gradient(circle at 38% 30%, #f3e6c2 0%, #d6bd87 78%);
-  box-shadow: 0 0 0 2px #efe3c4, 0 0 0 5px var(--gold-dk), 0 0 0 6px #cdb079, inset 0 1px 4px rgba(0,0,0,0.2), 0 2px 4px rgba(0,0,0,0.2);
+  background: radial-gradient(circle at 38% 30%, #3a2c16 0%, #1c130a 75%);
+  box-shadow: 0 0 0 2px #1a1206, 0 0 0 5px #7a5c1c, 0 0 0 6px #2a1c0c, inset 0 2px 6px rgba(0,0,0,0.7), 0 3px 6px rgba(0,0,0,0.6);
 }
-.medallion-label { color: #4a3a1c; text-shadow: 0 1px 0 rgba(255,255,255,0.4); }
+.medallion-disc::before { background: conic-gradient(from 210deg, #7a5c1c, #f6e2a0 25%, #b8923a 50%, #f6e2a0 72%, #7a5c1c 100%); }
+.medallion.active .medallion-disc { box-shadow: 0 0 0 2px #1a1206, 0 0 0 5px #f6e2a0, 0 0 0 6px #2a1c0c, inset 0 2px 6px rgba(0,0,0,0.6), 0 0 12px rgba(246,226,160,0.5); }
+.medallion-label { color: #f6e2a0; text-shadow: 0 1px 2px #000; }
 
 /* кнопки/инпуты/прогресс/модалки */
 .btn.ghost { background: #ece0c2; border-color: var(--border); color: #2c2417; }
@@ -1705,15 +1716,15 @@ body { background: #d8c8a3; }
 .bs-tabs button.sel { color: var(--gold-lt); border-color: var(--gold); }
 .bs-unit-rank { color: var(--gold-lt); }
 
-/* карта/хроника/доки — светлее */
-.map-viewport { background: #cfe0c2; }
-.map-hint { background: rgba(255,255,255,0.6); color: #5a4e34; }
-.map-toppanel { background: linear-gradient(180deg, rgba(226,207,163,0.96), rgba(205,176,121,0.96)); border: 2px solid var(--brass); }
-.chronicle2 { background: linear-gradient(0deg, #e2cfa3, #cdb079ee); border-top: 2px solid var(--brass); }
-.chronicle2 .announce .clabel { color: #2c5a9e; } .chronicle2 .events .clabel { color: #b3382f; }
-.chronicle2 .announce .cmar { color: #2c4a6e; } .chronicle2 .events .cmar { color: #8a3a2a; }
-.shield-dock, .to-map-btn { background: linear-gradient(180deg, #e2cfa3, #cdb079); border: 2px solid var(--brass); color: #4a3a1c; }
-.shield-dock-txt { color: #4a3a1c; }
+/* карта/хроника/доки — оставляем тёмными (часть «мира», как было) */
+.map-viewport { background: #0e1a12; }
+.map-hint { background: rgba(13,19,32,0.6); color: #8d99ab; }
+.map-toppanel { background: linear-gradient(180deg, rgba(58,40,20,0.95), rgba(28,18,8,0.95)); border: 2px solid #b8923a; }
+.chronicle2 { background: linear-gradient(0deg, #120b04, #241708ee); border-top: 2px solid #b8923a; }
+.chronicle2 .announce .clabel { color: #6fb6ff; } .chronicle2 .events .clabel { color: #ff8a6a; }
+.chronicle2 .announce .cmar { color: #aacdf5; } .chronicle2 .events .cmar { color: #f0b6a6; }
+.shield-dock, .to-map-btn { background: linear-gradient(180deg, #4a3219, #241708); border: 2px solid #b8923a; color: #f6e2a0; }
+.shield-dock-txt { color: #f6e2a0; }
 
 /* ============ АКАДЕМИЯ: древо квадратов ============ */
 .ac-eras { display: grid; grid-template-columns: repeat(5, 1fr); gap: 6px; margin-bottom: 8px; }
@@ -1743,3 +1754,56 @@ body { background: #d8c8a3; }
 .ac-sq-rank { display: flex; gap: 3px; }
 .ac-sq .ac-pip { width: 8px; height: 8px; border-radius: 2px; background: #ddcca3; border: 1px solid var(--border); }
 .ac-sq .ac-pip.on { background: var(--gold); border-color: var(--gold-dk); }
+
+/* ============ ДОФИКСЫ СВЕТЛОЙ ТЕМЫ ============ */
+/* вход (email/пароль) */
+.auth-input { background: #fbf4e1; border: 1px solid var(--border); color: #2c2417; }
+.auth-input::placeholder { color: #9b8a63; }
+.auth-input:focus { border-color: var(--gold); }
+
+/* почта: панель «Входящие» */
+.gm-toolbar { background: linear-gradient(180deg, #f3ead2, #e6d8b6); border: 1px solid var(--gold-dk); }
+.gm-tb-title { color: var(--gold-lt); }
+.gm-tb-count { color: #8a7c5a; }
+
+/* профиль: светлые карточки/таблички/вкладки */
+.prof-card { background: linear-gradient(180deg, #fbf4e1, #efe3c4); border: 2px solid var(--brass); }
+.prof-pic { background: radial-gradient(circle at 40% 30%, #f0e2bf, #d8c290); box-shadow: 0 0 0 3px var(--gold-lt), 0 0 0 6px var(--gold-dk); }
+.prof-role { color: var(--gold-lt); }
+.prof-plaque { background: linear-gradient(180deg, #f3ead2, #e6d8b6); border: 1px solid var(--gold-dk); }
+.prof-plaque span { color: #7a6a48; }
+.prof-plaque b { color: var(--gold-lt); }
+.prof-tabs button { background: #ece0c2; border: 2px solid var(--gold-dk); color: #2c2417; }
+.prof-tabs button.sel { border-color: var(--gold); color: var(--gold-lt); }
+
+/* ============ ГЕРОЙ: «бумажная кукла» (5 слотов слева + 5 справа) ============ */
+.paperdoll {
+  display: grid; grid-template-columns: 1fr 1.1fr 1fr; gap: 8px; align-items: stretch;
+  margin-bottom: 8px;
+}
+.pd-col { display: flex; flex-direction: column; gap: 8px; }
+.pd-slot {
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px;
+  min-height: 64px; padding: 6px 4px; cursor: pointer; font-family: inherit;
+  background: #f3ead2; border: 2px solid var(--border); border-radius: 10px; color: #2c2417;
+  transition: border-color 0.12s, box-shadow 0.12s;
+}
+.pd-slot.filled { border-color: var(--rc, var(--gold-dk)); box-shadow: 0 0 0 1px var(--rc, var(--gold-dk)) inset; }
+.pd-slot.sel { box-shadow: 0 0 0 2px var(--gold) inset; }
+.pd-slot-ic { font-size: 24px; line-height: 1; }
+.pd-slot-name { font-size: 10px; color: #7a6a48; text-align: center; line-height: 1.15; }
+.pd-slot.filled .pd-slot-name { color: #2c2417; font-weight: 600; }
+.pd-hero {
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px;
+  border-radius: 12px; padding: 10px 6px;
+  background: linear-gradient(180deg, color-mix(in srgb, var(--hc) 22%, #f6efda), #efe3c4);
+  border: 2px solid var(--brass);
+}
+.pd-hero-fig {
+  width: 84px; height: 84px; border-radius: 50%;
+  display: flex; align-items: center; justify-content: center; font-size: 46px;
+  background: radial-gradient(circle at 50% 35%, color-mix(in srgb, var(--hc) 45%, #f3ead2), #e3d4ad);
+  border: 3px solid var(--hc);
+}
+.pd-hero-name { font-family: var(--serif); font-weight: 800; color: #3a2f1a; }
+.pd-hero-lvl { font-size: 12px; color: var(--gold-lt); font-weight: 700; }

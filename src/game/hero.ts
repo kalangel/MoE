@@ -1,5 +1,6 @@
 import type {
-  EquipSlot, GameState, GearSlot, HeroBuffKey, HeroId, HeroInstance, HeroSystemData, UnitClass,
+  EquipSlot, GameState, GearRarity, GearSlot, HeroBuffKey, HeroGearItem, HeroId, HeroInstance,
+  HeroSystemData, UnitClass,
 } from './types';
 
 // ============================================================
@@ -31,7 +32,7 @@ function zeroBuffs(): HeroBuffs {
 }
 
 // ---------- Константы прогрессии ----------
-export const HERO_MAX_LEVEL = 60;
+export const HERO_MAX_LEVEL = 90;
 export const HERO_POINTS_PER_LEVEL = 1;        // 1 очко таланта за уровень
 export const HERO_ENERGY_BASE = 100;           // базовый пул энергии
 export const HERO_ENERGY_REGEN_PER_H = 10;     // восстановление энергии в час
@@ -161,66 +162,34 @@ export function heroSpentPoints(talents: Record<string, number>): number {
 }
 
 // ============================================================
-//  3. ЭКИПИРОВКА (Кузница). Предметы вливают % в стат-блок героя.
+//  3. ЭКИПИРОВКА — 10 слотов (5 слева, 5 справа), предметы выпадают из лута.
 // ============================================================
-export type GearRarity = 'common' | 'rare' | 'epic' | 'legendary';
-
 export const RARITY_META: Record<GearRarity, { name: string; color: string }> = {
-  common: { name: 'Обычный', color: '#9aa7b5' },
-  rare: { name: 'Редкий', color: '#4f8fde' },
-  epic: { name: 'Эпический', color: '#9b59b6' },
-  legendary: { name: 'Легендарный', color: '#f5c542' },
+  common: { name: 'Обычный', color: '#8a7c5a' },
+  rare: { name: 'Редкий', color: '#2c5a9e' },
+  epic: { name: 'Эпический', color: '#7d3aa8' },
+  legendary: { name: 'Легендарный', color: '#b8860b' },
 };
 
-export interface HeroGearDef {
-  id: string;
-  name: string;
-  icon: string;
-  slot: GearSlot;
-  rarity: GearRarity;
-  mods: HeroEffects;     // % модификаторы, которые предмет вливает в стат-блок
-}
-
-export const EQUIP_SLOTS: { slot: EquipSlot; accepts: GearSlot; name: string; icon: string }[] = [
-  { slot: 'weapon', accepts: 'weapon', name: 'Оружие', icon: '⚔️' },
-  { slot: 'armor', accepts: 'armor', name: 'Броня', icon: '🛡️' },
-  { slot: 'helmet', accepts: 'helmet', name: 'Шлем', icon: '🪖' },
-  { slot: 'boots', accepts: 'boots', name: 'Сапоги', icon: '🥾' },
-  { slot: 'acc1', accepts: 'accessory', name: 'Аксессуар I', icon: '💍' },
-  { slot: 'acc2', accepts: 'accessory', name: 'Аксессуар II', icon: '📿' },
+export const EQUIP_SLOTS: { slot: EquipSlot; side: 'left' | 'right'; accepts: GearSlot; name: string; icon: string }[] = [
+  // левая колонка
+  { slot: 'helmet', side: 'left', accepts: 'helmet', name: 'Шлем', icon: '🪖' },
+  { slot: 'chest', side: 'left', accepts: 'chest', name: 'Нагрудник', icon: '🛡️' },
+  { slot: 'weapon', side: 'left', accepts: 'weapon', name: 'Меч', icon: '⚔️' },
+  { slot: 'ring1', side: 'left', accepts: 'ring', name: 'Кольцо', icon: '💍' },
+  { slot: 'trophy', side: 'left', accepts: 'trophy', name: 'Трофей', icon: '🏆' },
+  // правая колонка
+  { slot: 'gloves', side: 'right', accepts: 'gloves', name: 'Рукавица', icon: '🥊' },
+  { slot: 'boots', side: 'right', accepts: 'boots', name: 'Ботинок', icon: '🥾' },
+  { slot: 'weapon2', side: 'right', accepts: 'weapon', name: 'Меч', icon: '🗡️' },
+  { slot: 'ring2', side: 'right', accepts: 'ring', name: 'Кольцо', icon: '💍' },
+  { slot: 'cloak', side: 'right', accepts: 'cloak', name: 'Плащ', icon: '🧥' },
 ];
 
-export const HERO_GEAR: Record<string, HeroGearDef> = {
-  // Оружие
-  ironSword: { id: 'ironSword', name: 'Железный меч', icon: '🗡️', slot: 'weapon', rarity: 'common', mods: { infantryAttack: 0.05 } },
-  warblade: { id: 'warblade', name: 'Клинок войны', icon: '⚔️', slot: 'weapon', rarity: 'epic', mods: { infantryAttack: 0.10, allTroopAttack: 0.04 } },
-  longbow: { id: 'longbow', name: 'Длинный лук', icon: '🏹', slot: 'weapon', rarity: 'rare', mods: { rangedAttack: 0.08 } },
-  // Броня
-  leatherArmor: { id: 'leatherArmor', name: 'Кожаный доспех', icon: '🦺', slot: 'armor', rarity: 'common', mods: { allTroopDefense: 0.04 } },
-  plateArmor: { id: 'plateArmor', name: 'Латный доспех', icon: '🛡️', slot: 'armor', rarity: 'epic', mods: { infantryDefense: 0.10, allTroopDefense: 0.04 } },
-  // Шлем
-  scoutHelm: { id: 'scoutHelm', name: 'Шлем разведчика', icon: '🪖', slot: 'helmet', rarity: 'rare', mods: { marchSpeed: 0.06 } },
-  crownOfWisdom: { id: 'crownOfWisdom', name: 'Венец мудрости', icon: '👑', slot: 'helmet', rarity: 'epic', mods: { researchSpeed: 0.10 } },
-  // Сапоги
-  swiftBoots: { id: 'swiftBoots', name: 'Сапоги скорохода', icon: '🥾', slot: 'boots', rarity: 'rare', mods: { marchSpeed: 0.05, marchCapacity: 0.03 } },
-  // Аксессуары
-  ringOfPlenty: { id: 'ringOfPlenty', name: 'Кольцо изобилия', icon: '💍', slot: 'accessory', rarity: 'rare', mods: { resourceProduction: 0.08 } },
-  bannerOfCommand: { id: 'bannerOfCommand', name: 'Знамя командования', icon: '🚩', slot: 'accessory', rarity: 'legendary', mods: { marchCapacity: 0.08, allTroopAttack: 0.05 } },
-  medicPouch: { id: 'medicPouch', name: 'Сумка лекаря', icon: '📿', slot: 'accessory', rarity: 'common', mods: { healingSpeed: 0.06, hospitalCapacity: 0.06 } },
-};
-
-/** Стартовая экипировка, выдаётся при выборе героя (в инвентарь, не надета). */
-export const HERO_STARTER_GEAR: Record<string, number> = { ironSword: 1, leatherArmor: 1 };
-
-export function gearDef(id: string): HeroGearDef | undefined {
-  return HERO_GEAR[id];
-}
-/** Можно ли надеть предмет gearId в слот equipSlot. */
-export function slotAccepts(equipSlot: EquipSlot, gearId: string): boolean {
-  const def = gearDef(gearId);
-  if (!def) return false;
+/** Можно ли надеть предмет в данный слот (по категории). */
+export function slotAccepts(equipSlot: EquipSlot, item: HeroGearItem): boolean {
   const slotDef = EQUIP_SLOTS.find((s) => s.slot === equipSlot);
-  return !!slotDef && slotDef.accepts === def.slot;
+  return !!slotDef && slotDef.accepts === item.slot;
 }
 
 // ============================================================
@@ -230,9 +199,10 @@ export interface ExpeditionReward {
   exp: number;
   gold?: number;
   iron?: number; wood?: number; silver?: number; food?: number;
-  gearPool?: string[];   // возможный дроп экипировки (один из)
-  gearChance?: number;   // шанс дропа 0..1
-  recruit?: boolean;     // может разблокировать нового героя в коллекцию
+  gearRarity?: GearRarity; // редкость возможного дропа экипировки
+  gearLevel?: number;      // уровень предмета (масштаб бонусов)
+  gearChance?: number;     // шанс дропа 0..1
+  recruit?: boolean;       // может разблокировать нового героя в коллекцию
   recruitChance?: number;
 }
 export interface ExpeditionDef {
@@ -255,17 +225,17 @@ export const EXPEDITIONS: ExpeditionDef[] = [
   {
     id: 'ruins', name: 'Забытые руины', icon: '🏚️', desc: 'Поиск реликвий — шанс найти снаряжение.',
     durationH: 4, energyCost: 40, minLevel: 5,
-    rewards: { exp: 700, gold: 25, iron: 2500, wood: 2500, gearPool: ['scoutHelm', 'longbow', 'ringOfPlenty'], gearChance: 0.5 },
+    rewards: { exp: 700, gold: 25, iron: 2500, wood: 2500, gearRarity: 'rare', gearLevel: 2, gearChance: 0.5 },
   },
   {
     id: 'frontier', name: 'Поход на рубежи', icon: '🗺️', desc: 'Долгая экспедиция за крупной добычей.',
     durationH: 8, energyCost: 70, minLevel: 10,
-    rewards: { exp: 1600, gold: 60, iron: 6000, wood: 6000, silver: 4000, gearPool: ['warblade', 'plateArmor', 'crownOfWisdom', 'swiftBoots'], gearChance: 0.6 },
+    rewards: { exp: 1600, gold: 60, iron: 6000, wood: 6000, silver: 4000, gearRarity: 'epic', gearLevel: 3, gearChance: 0.6 },
   },
   {
     id: 'legend', name: 'Легендарная одиссея', icon: '🌋', desc: 'Опаснейший путь — шанс на легендарный трофей.',
     durationH: 16, energyCost: 100, minLevel: 20,
-    rewards: { exp: 4000, gold: 150, iron: 12000, wood: 12000, silver: 9000, food: 9000, gearPool: ['bannerOfCommand'], gearChance: 0.4, recruit: true, recruitChance: 0.5 },
+    rewards: { exp: 4000, gold: 150, iron: 12000, wood: 12000, silver: 9000, food: 9000, gearRarity: 'legendary', gearLevel: 4, gearChance: 0.4, recruit: true, recruitChance: 0.5 },
   },
 ];
 
@@ -277,7 +247,8 @@ export function expeditionDef(id: string): ExpeditionDef | undefined {
 //  5. УРОВНИ / ОПЫТ
 // ============================================================
 export function heroXpToNext(level: number): number {
-  return 200 + level * 150;
+  // Дешёвые первые уровни (рост квадратичный), до 90 уровня.
+  return Math.round(40 + level * level * 6);
 }
 /** {level, into, need} — текущий уровень (с 1), накоплено в нём, нужно до след. */
 export function heroLevelInfo(exp: number): { level: number; into: number; need: number } {
@@ -302,8 +273,11 @@ export function heroAvailablePoints(hero: HeroInstance | null): number {
 // ============================================================
 //  Доступ к активному герою / коллекции
 // ============================================================
-export function emptyEquipment(): Record<EquipSlot, string | null> {
-  return { weapon: null, armor: null, helmet: null, boots: null, acc1: null, acc2: null };
+export function emptyEquipment(): Record<EquipSlot, HeroGearItem | null> {
+  return {
+    helmet: null, chest: null, weapon: null, ring1: null, trophy: null,
+    gloves: null, boots: null, weapon2: null, ring2: null, cloak: null,
+  };
 }
 export function freshHeroSystem(): HeroSystemData {
   return { selected: false, activeId: null, heroes: {}, gearInventory: {} };
@@ -374,8 +348,8 @@ export function heroInstanceBuffs(hero: HeroInstance | null): HeroBuffs {
     if (rank > 0) add(node.effects, rank);
   }
   for (const slot of Object.keys(hero.equipment) as EquipSlot[]) { // 3) экипировка
-    const gid = hero.equipment[slot];
-    if (gid) add(gearDef(gid)?.mods);
+    const item = hero.equipment[slot];
+    if (item) add(item.mods);
   }
   return validateBuffs(out);
 }

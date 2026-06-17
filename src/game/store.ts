@@ -20,11 +20,14 @@ import {
   paragonMultipliers, paragonNode,
 } from './paragon';
 import {
-  EXPEDITION_CASTLE_REQ, HERO_ENERGY_BASE, HERO_RESET_COST_GOLD, HERO_STARTER_GEAR, HEROES,
-  activeHero, emptyEquipment, expeditionDef, freshHeroSystem, gearDef, heroAvailablePoints,
+  EXPEDITION_CASTLE_REQ, HERO_ENERGY_BASE, HERO_RESET_COST_GOLD, HEROES,
+  activeHero, emptyEquipment, expeditionDef, freshHeroSystem, heroAvailablePoints,
   heroBuffs, heroEnergyMax, heroLevelInfo, heroNodeCost, heroNodeUnlocked, heroTalentNode,
   settleHeroEnergy, slotAccepts,
 } from './hero';
+import {
+  barbXpForCamp, generateGear, randomGearSlot, rollCampLoot, unlockedBarbLevel,
+} from './barbarians';
 import {
   ACADEMY_NODE_MAX, academyAvailablePoints, academyBuffs, academyEraUnlocked,
   academyNode, academyNodeUnlocked,
@@ -153,17 +156,26 @@ function zoneFromLegacy(buildings?: Partial<Record<BuildingId, number>>): Resour
  *  - отсутствие данных — пустая система (выбор ещё не сделан).
  */
 function migrateHeroSystem(parsed: Record<string, unknown>, now: number): HeroSystemData {
+  // Снаряжение переведено на новую модель (10 слотов, предметы-экземпляры).
+  // Чтобы не тащить несовместимый старый инвентарь — начинаем экипировку с нуля.
   const hs = parsed.heroSystem as HeroSystemData | undefined;
-  if (hs && hs.heroes) return hs;
-  const old = parsed.hero as (Partial<HeroInstance> & { gearInventory?: Record<string, number> }) | null | undefined;
+  if (hs && hs.heroes) {
+    for (const id of Object.keys(hs.heroes)) {
+      const h = hs.heroes[id] as HeroInstance;
+      h.equipment = emptyEquipment();
+    }
+    hs.gearInventory = {};
+    return hs;
+  }
+  const old = parsed.hero as Partial<HeroInstance> | null | undefined;
   if (old && old.id) {
     const inst: HeroInstance = {
       id: old.id, exp: old.exp ?? 0, level: old.level ?? 1,
-      talents: old.talents ?? {}, equipment: old.equipment ?? emptyEquipment(),
+      talents: old.talents ?? {}, equipment: emptyEquipment(),
       energy: old.energy ?? HERO_ENERGY_BASE, energyAt: old.energyAt ?? now,
       expedition: old.expedition ?? null,
     };
-    return { selected: true, activeId: old.id, heroes: { [old.id]: inst }, gearInventory: old.gearInventory ?? {} };
+    return { selected: true, activeId: old.id, heroes: { [old.id]: inst }, gearInventory: {} };
   }
   return freshHeroSystem();
 }
@@ -183,6 +195,7 @@ export function freshState(now: number): GameState {
     tutorialStep: null,
     research: { economy: 0, construction: 0, attack: 0, defense: 0 },
     academy: {},
+    barbXp: 0,
     army: {},
     buildQueue: [],
     researchQueue: [],
@@ -252,6 +265,7 @@ function loadState(): GameState {
         // Система героев: доступна сразу; выбор стартового героя — при первом открытии меню.
         heroSystem: migrateHeroSystem(parsed as Record<string, unknown>, now),
         academy: parsed.academy ?? {},
+        barbXp: parsed.barbXp ?? 0,
       } as GameState;
     }
   } catch (e) {
@@ -362,10 +376,10 @@ function completeQueues(s: GameState, now: number, offline: boolean): BattleRepo
     if (r.silver) s.resources.silver += r.silver;
     if (r.food) s.resources.food += r.food;
     let extra = '';
-    if (r.gearPool && r.gearPool.length && Math.random() < (r.gearChance ?? 0)) {
-      const gid = r.gearPool[Math.floor(Math.random() * r.gearPool.length)];
-      s.heroSystem.gearInventory[gid] = (s.heroSystem.gearInventory[gid] ?? 0) + 1;
-      extra += ` Трофей: ${gearDef(gid)?.name ?? gid}!`;
+    if (r.gearRarity && Math.random() < (r.gearChance ?? 0)) {
+      const gear = generateGear(randomGearSlot(), r.gearRarity, Math.max(1, r.gearLevel ?? 1));
+      s.heroSystem.gearInventory[gear.id] = gear;
+      extra += ` Трофей: ${gear.name}!`;
     }
     // шанс завербовать нового героя в коллекцию
     if (r.recruit && Math.random() < (r.recruitChance ?? 0)) {
@@ -468,20 +482,33 @@ function resolveBattle(
 
   const loot: Partial<Resources> = {};
   if (win) {
-    // Лагеря варваров дают заметно больше золота за уровень, чем замки ботов
-    const goldLoot = isCamp
-      ? Math.round((20 + level * 26) * (0.85 + Math.random() * 0.3))
-      : Math.round((12 + level * 9) * (0.8 + Math.random() * 0.4));
-    const resMult = isCamp ? 95 : 70;
+    const kills = Math.round(def / 24);
+    s.stats.killedTroops += kills;
+    addHeroExp(s, kills * (1 + level)); // опыт чемпиона — за каждого убитого бойца
     const lootBonus = 1 + paragonMultipliers(s).loot + academyBuffs(s).loot;
-    loot.gold = Math.round(goldLoot * lootBonus);
-    loot.iron = Math.round(resMult * level * (0.7 + Math.random() * 0.6) * lootBonus);
-    loot.wood = Math.round(resMult * level * (0.7 + Math.random() * 0.6) * lootBonus);
-    loot.silver = Math.round((resMult - 20) * level * (0.7 + Math.random() * 0.6) * lootBonus);
-    loot.food = Math.round((resMult - 15) * level * (0.7 + Math.random() * 0.6) * lootBonus);
-    for (const [r, v] of Object.entries(loot)) s.resources[r as Resource] += v as number;
-    s.stats.killedTroops += Math.round(def / 24);
-    s.stats.lootedResources += (loot.iron ?? 0) + (loot.wood ?? 0) + (loot.silver ?? 0) + (loot.food ?? 0);
+
+    if (isCamp) {
+      // Таблица лута лагеря: одна из наград (золото / предмет / сундук / редкое)
+      const drop = rollCampLoot(level);
+      if (drop.gold) { const g = Math.round(drop.gold * lootBonus); loot.gold = g; s.resources.gold += g; }
+      if (drop.gear) s.heroSystem.gearInventory[drop.gear.id] = drop.gear;
+      // Опыт Варваров → открывает лагеря выше уровнем
+      const beforeLvl = unlockedBarbLevel(s.barbXp);
+      s.barbXp += barbXpForCamp(level);
+      const afterLvl = unlockedBarbLevel(s.barbXp);
+      pushLog(s, '🔥', `Лагерь варваров ур. ${level} разорён. ${drop.log}`, 'battle');
+      if (afterLvl > beforeLvl) pushLog(s, '⚔️', `Открыт Уровень Варваров ${afterLvl}! Доступны лагеря посильнее.`, 'info');
+    } else {
+      const resMult = 70;
+      loot.gold = Math.round((12 + level * 9) * (0.8 + Math.random() * 0.4) * lootBonus);
+      loot.iron = Math.round(resMult * level * (0.7 + Math.random() * 0.6) * lootBonus);
+      loot.wood = Math.round(resMult * level * (0.7 + Math.random() * 0.6) * lootBonus);
+      loot.silver = Math.round((resMult - 20) * level * (0.7 + Math.random() * 0.6) * lootBonus);
+      loot.food = Math.round((resMult - 15) * level * (0.7 + Math.random() * 0.6) * lootBonus);
+      for (const [r, v] of Object.entries(loot)) s.resources[r as Resource] += v as number;
+      s.stats.lootedResources += (loot.iron ?? 0) + (loot.wood ?? 0) + (loot.silver ?? 0) + (loot.food ?? 0);
+      pushLog(s, '⚔️', `Победа над ${enemyName}! Трофеи: ${loot.gold} золота`, 'battle');
+    }
 
     obj.damageFraction = Math.min(0.85, damageNow(obj, at, isCamp) + 0.5);
     obj.damagedAt = at;
@@ -490,8 +517,6 @@ function resolveBattle(
     s.stats.wins += 1;
     addQuestProgress(s, 'win');
     addParagon(s, isCamp ? 40 : 60);
-    addHeroExp(s, isCamp ? 30 : 45);
-    pushLog(s, isCamp ? '🔥' : '⚔️', `Победа над ${enemyName}! Трофеи: ${loot.gold} золота`, 'battle');
   } else {
     obj.damageFraction = Math.min(0.85, damageNow(obj, at, isCamp) + 0.12);
     obj.damagedAt = at;
@@ -537,12 +562,13 @@ function resolvePlayerBattle(
     loot.silver = Math.round(90 * lvl * (0.7 + Math.random() * 0.6) * lootBonus);
     loot.food = Math.round(90 * lvl * (0.7 + Math.random() * 0.6) * lootBonus);
     for (const [r, v] of Object.entries(loot)) s.resources[r as Resource] += v as number;
-    s.stats.killedTroops += Math.round(def / 24);
+    const kills = Math.round(def / 24);
+    s.stats.killedTroops += kills;
+    addHeroExp(s, kills * (1 + lvl)); // опыт чемпиона за убитых бойцов
     s.stats.lootedResources += (loot.iron ?? 0) + (loot.wood ?? 0) + (loot.silver ?? 0) + (loot.food ?? 0);
     s.stats.wins += 1;
     addQuestProgress(s, 'win');
     addParagon(s, 70);
-    addHeroExp(s, 50);
     pushLog(s, '⚔️', `Победа над лордом ${enemy.nick}! Трофеи: ${loot.gold} золота`, 'battle');
   } else {
     s.stats.losses += 1;
@@ -905,7 +931,7 @@ export const useGame = create<Store>((set, get) => {
         unlockHeroInternal(s, id, now);
         s.heroSystem.activeId = id;
         s.heroSystem.selected = true;
-        s.heroSystem.gearInventory = { ...s.heroSystem.gearInventory, ...HERO_STARTER_GEAR };
+        // Снаряжения в начале нет — игрок выбивает его в боях с варварами.
         pushLog(s, HEROES[id].icon, `Герой избран: ${HEROES[id].name} — ${HEROES[id].title}.`, 'info');
       }),
 
@@ -951,24 +977,25 @@ export const useGame = create<Store>((set, get) => {
         pushLog(s, '🔄', `Таланты сброшены за ${HERO_RESET_COST_GOLD} 👑 — очки возвращены.`, 'info');
       }),
 
-      // Надеть предмет в слот активного героя (текущий уходит в общий склад).
+      // Надеть предмет (по id из склада) в слот активного героя; текущий — обратно в склад.
       equipHeroGear: (slot, gearId) => mutate((s) => {
         const h = activeHero(s);
-        if (!h || !slotAccepts(slot, gearId)) return;
-        if ((s.heroSystem.gearInventory[gearId] ?? 0) <= 0) return;
+        if (!h) return;
+        const item = s.heroSystem.gearInventory[gearId];
+        if (!item || !slotAccepts(slot, item)) return;
         const prev = h.equipment[slot];
-        if (prev) s.heroSystem.gearInventory[prev] = (s.heroSystem.gearInventory[prev] ?? 0) + 1;
-        s.heroSystem.gearInventory[gearId] -= 1;
-        h.equipment[slot] = gearId;
+        delete s.heroSystem.gearInventory[gearId];
+        h.equipment[slot] = item;
+        if (prev) s.heroSystem.gearInventory[prev.id] = prev;
       }),
 
-      // Снять предмет — возвращается в общий склад.
+      // Снять предмет — возвращается в склад.
       unequipHeroGear: (slot) => mutate((s) => {
         const h = activeHero(s);
         if (!h) return;
         const prev = h.equipment[slot];
         if (!prev) return;
-        s.heroSystem.gearInventory[prev] = (s.heroSystem.gearInventory[prev] ?? 0) + 1;
+        s.heroSystem.gearInventory[prev.id] = prev;
         h.equipment[slot] = null;
       }),
 
@@ -1097,6 +1124,11 @@ export const useGame = create<Store>((set, get) => {
         const now = Date.now();
         const pos = target.kind === 'camp' ? target.camp! : target.bot!;
         if (target.kind === 'castle' && target.bot!.shieldUntil > now) return; // под щитом нельзя
+        // Лагеря выше открытого Уровня Варваров атаковать нельзя
+        if (target.kind === 'camp' && target.camp!.level > unlockedBarbLevel(s.barbXp)) {
+          pushLog(s, '🔒', `Лагерь ур. ${target.camp!.level} ещё закрыт — копи Опыт Варваров.`, 'info');
+          return;
+        }
         const total = Object.values(units).reduce((a, b) => a + b, 0);
         if (total <= 0) return;
         for (const [id, n] of Object.entries(units)) {
