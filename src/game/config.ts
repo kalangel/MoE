@@ -72,6 +72,62 @@ export const FACTIONS: Record<FactionId, FactionDef> = {
   },
 };
 
+// ---- Титулы (лор фракций для экрана выбора) ----
+export interface FactionLore {
+  title: string;                                   // титул правителя
+  tagline: string;                                 // краткое преимущество (лицо карточки)
+  army: string[];                                  // строки «Преимущества армии»
+  economy: string[];                               // строки «Экономика»
+  identity: string;                                // девиз-идентичность (если секция пуста)
+  squads: { name: string; ability: string }[];     // сигнатурные отряды; ability — зелёным
+}
+export const FACTION_LORE: Record<FactionId, FactionLore> = {
+  highland: {
+    title: 'Патриций',
+    tagline: 'Камень и сталь: возводи быстрее и куй железо без устали.',
+    army: [],
+    economy: ['Скорость строительства: +15%', 'Поступление Железа: +20%'],
+    identity: 'Мощь в развитии: неприступные стены и полные склады.',
+    squads: [
+      { name: 'Тевтонские рыцари', ability: 'Стена щитов' },
+      { name: 'Лазутчики клана', ability: 'Скрытый удар' },
+    ],
+  },
+  tsars: {
+    title: 'Воевода',
+    tagline: 'Мудрость севера: наука и леса работают на тебя.',
+    army: [],
+    economy: ['Скорость изучения: +20%', 'Поступление Дерева: +20%'],
+    identity: 'Мощь в знаниях: технологии опережают врага на эпоху.',
+    squads: [
+      { name: 'Берсерки', ability: 'Боевая ярость' },
+      { name: 'Дружинники', ability: 'Клич дружины' },
+    ],
+  },
+  sultans: {
+    title: 'Султан',
+    tagline: 'Жар барханов: копья жалят, а орда растёт без края.',
+    army: ['Атака копейщиков: +15%', 'Размер отряда: +5%'],
+    economy: [],
+    identity: 'Мощь в войске: бесчисленная орда сметает любые стены.',
+    squads: [
+      { name: 'Ассасины', ability: 'Ответный удар' },
+      { name: 'Мамлюки', ability: 'Смертоносный удар' },
+    ],
+  },
+  shogun: {
+    title: 'Шогун',
+    tagline: 'Путь клинка: честь самурая и блеск серебра.',
+    army: ['Атака мечников: +15%'],
+    economy: ['Поступление Серебра: +20%'],
+    identity: 'Мощь в балансе: острый меч и полная казна.',
+    squads: [
+      { name: 'Ниндзя', ability: 'Тень клинка' },
+      { name: 'Самураи', ability: 'Путь бусидо' },
+    ],
+  },
+};
+
 export const BUILDINGS: Record<BuildingId, BuildingDef> = {
   castle: {
     id: 'castle', name: 'Замок', maxLevel: 12,

@@ -1,72 +1,105 @@
 import { useState } from 'react';
 import { motion } from 'framer-motion';
-import { FACTIONS } from '../game/config';
+import { FACTIONS, FACTION_LORE } from '../game/config';
 import { useGame } from '../game/store';
 import type { FactionId } from '../game/types';
 import CastleSVG from './CastleSVG';
 
+/**
+ * Стартовый экран выбора титула (фракции).
+ * Карточка титула переворачивается по клику (flip), показывая детальные бонусы.
+ * Кнопка «Выбрать титул» на обороте запускает игру и ведёт на основной экран.
+ */
 export default function FactionSelect() {
   const startGame = useGame((s) => s.actions.startGame);
-  const [picked, setPicked] = useState<FactionId | null>(null);
+  const [flipped, setFlipped] = useState<Set<FactionId>>(new Set());
   const [name, setName] = useState('');
+
+  const toggle = (id: FactionId) =>
+    setFlipped((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id); else next.add(id);
+      return next;
+    });
 
   return (
     <div className="app">
-      <div className="faction-select">
+      <div className="title-select">
         <motion.div initial={{ opacity: 0, y: -20 }} animate={{ opacity: 1, y: 0 }}>
           <h1 className="title">⚜ МАРШ ИМПЕРИЙ ⚜</h1>
-          <p className="muted" style={{ textAlign: 'center', marginTop: 8 }}>
-            Выбери фракцию. Сменить её позже можно за 2000 золота.
-          </p>
+          <p className="muted ts-sub">Избери свой титул. Нажми на карточку, чтобы раскрыть детали.</p>
         </motion.div>
 
-        <div className="faction-grid">
-          {Object.values(FACTIONS).map((f, i) => (
-            <motion.div
-              key={f.id}
-              className={`faction-card ${picked === f.id ? 'selected' : ''}`}
-              style={{ borderColor: picked === f.id ? undefined : f.color + '55' }}
-              onClick={() => setPicked(f.id)}
-              initial={{ opacity: 0, y: 30 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: 0.1 + i * 0.1 }}
-            >
-              <CastleSVG faction={f.id} size={150} level={4} />
-              <h3 style={{ color: f.accent, justifyContent: 'center', marginTop: 4 }}>{f.name}</h3>
-              <div className="muted" style={{ fontStyle: 'italic', marginBottom: 8 }}>«{f.motto}»</div>
-              {f.bonusText.map((b) => (
-                <div key={b} style={{ fontSize: 12, color: 'var(--green)' }}>✦ {b}</div>
-              ))}
-              <div className="muted" style={{ marginTop: 8, fontSize: 11 }}>
-                {f.units[0].icon} {f.units[0].name} · {f.units[1].icon} {f.units[1].name}
-              </div>
-            </motion.div>
-          ))}
-        </div>
-
-        <motion.input
+        <input
           className="name-input"
           placeholder="Имя твоего лорда…"
           value={name}
           maxLength={20}
           onChange={(e) => setName(e.target.value)}
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          transition={{ delay: 0.5 }}
         />
 
-        <motion.button
-          className="btn gold"
-          style={{ marginTop: 16, padding: '12px 40px', fontSize: 16 }}
-          disabled={!picked}
-          onClick={() => picked && startGame(picked, name)}
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          transition={{ delay: 0.6 }}
-          whileTap={{ scale: 0.95 }}
-        >
-          ⚔ Основать империю
-        </motion.button>
+        <div className="title-grid">
+          {Object.values(FACTIONS).map((f, i) => {
+            const lore = FACTION_LORE[f.id];
+            const isFlipped = flipped.has(f.id);
+            return (
+              <motion.div
+                key={f.id}
+                className={`flip-card ${isFlipped ? 'flipped' : ''}`}
+                style={{ ['--fc' as string]: f.accent }}
+                onClick={() => toggle(f.id)}
+                initial={{ opacity: 0, y: 30 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: 0.1 + i * 0.08 }}
+              >
+                <div className="flip-card-inner">
+                  {/* ЛИЦО: титул + краткое преимущество */}
+                  <div className="flip-face flip-front">
+                    <CastleSVG faction={f.id} size={118} level={4} />
+                    <div className="tc-title" style={{ color: f.accent }}>{lore.title}</div>
+                    <div className="tc-realm">{f.name}</div>
+                    <p className="tc-tagline">{lore.tagline}</p>
+                    <div className="tc-hint">↻ нажми, чтобы раскрыть бонусы</div>
+                  </div>
+
+                  {/* ОБОРОТ: детальные бонусы */}
+                  <div className="flip-face flip-back">
+                    <div className="tc-back-title" style={{ color: f.accent }}>{lore.title}</div>
+                    <div className="tc-realm" style={{ textAlign: 'center', marginBottom: 4 }}>{f.name}</div>
+
+                    <div className="tc-section">⚔️ Преимущества армии</div>
+                    {lore.army.length
+                      ? lore.army.map((a) => <div key={a} className="tc-line">✦ {a}</div>)
+                      : <div className="tc-identity">{lore.identity}</div>}
+
+                    <div className="tc-section">🌾 Экономика</div>
+                    {lore.economy.length
+                      ? lore.economy.map((e) => <div key={e} className="tc-line">✦ {e}</div>)
+                      : <div className="tc-identity">{lore.identity}</div>}
+
+                    <div className="tc-section">🥷 Отряд Фракции</div>
+                    {lore.squads.map((sq) => (
+                      <div key={sq.name} className="tc-line">
+                        {sq.name}: <span className="tc-ability">{sq.ability}</span>
+                      </div>
+                    ))}
+
+                    <button
+                      className="btn gold tc-choose"
+                      onClick={(e) => { e.stopPropagation(); startGame(f.id, name); }}
+                    >
+                      ⚔ Выбрать титул
+                    </button>
+                  </div>
+                </div>
+              </motion.div>
+            );
+          })}
+        </div>
+
+        <p className="ts-note">
+          Вы можете перейти в другую фракцию воспользовавшись функцией «Смена Фракции».
+        </p>
       </div>
     </div>
   );
