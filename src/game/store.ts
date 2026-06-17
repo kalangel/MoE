@@ -25,6 +25,10 @@ import {
   heroBuffs, heroEnergyMax, heroLevelInfo, heroNodeCost, heroNodeUnlocked, heroTalentNode,
   settleHeroEnergy, slotAccepts,
 } from './hero';
+import {
+  ACADEMY_NODE_MAX, academyAvailablePoints, academyBuffs, academyEraUnlocked,
+  academyNode, academyNodeUnlocked,
+} from './academy';
 import type {
   BattleReport, Bot, BuildingId, Camp, EnemySnapshot, EquipSlot, FactionId, GameState, HeroId,
   HeroInstance, HeroSystemData, LogEntry, MarchTask, ResearchId, Resource, ResourceBuildingId,
@@ -63,6 +67,8 @@ interface Actions {
   unequipHeroGear: (slot: EquipSlot) => void;
   startExpedition: (expId: string) => void;
   startResearch: (r: ResearchId) => void;
+  researchAcademy: (nodeId: string) => void;
+  resetAcademy: () => void;
   trainUnits: (unitId: string, count: number) => void;
   speedUp: (queue: 'build' | 'research' | 'train', id: string) => void;
   activateShield: (shieldId: string) => void;
@@ -176,6 +182,7 @@ export function freshState(now: number): GameState {
     onboarded: false,
     tutorialStep: null,
     research: { economy: 0, construction: 0, attack: 0, defense: 0 },
+    academy: {},
     army: {},
     buildQueue: [],
     researchQueue: [],
@@ -244,6 +251,7 @@ function loadState(): GameState {
         tutorialStep: parsed.tutorialStep ?? null,
         // Система героев: доступна сразу; выбор стартового героя — при первом открытии меню.
         heroSystem: migrateHeroSystem(parsed as Record<string, unknown>, now),
+        academy: parsed.academy ?? {},
       } as GameState;
     }
   } catch (e) {
@@ -441,7 +449,7 @@ function resolveBattle(
   const def = effectivePower(obj, at) * (0.92 + Math.random() * 0.16);
   const win = atk > def;
 
-  const formLossCut = (FORMATIONS.find((f) => f.id === formationId)?.lossReduction ?? 0) + paragonMultipliers(s).lossReduction;
+  const formLossCut = (FORMATIONS.find((f) => f.id === formationId)?.lossReduction ?? 0) + paragonMultipliers(s).lossReduction + academyBuffs(s).lossCut;
   const lossFrac = (win
     ? Math.min(0.6, 0.08 + 0.35 * (def / Math.max(atk, 1)))
     : 0.45 + Math.random() * 0.25) * Math.max(0.2, 1 - formLossCut);
@@ -465,7 +473,7 @@ function resolveBattle(
       ? Math.round((20 + level * 26) * (0.85 + Math.random() * 0.3))
       : Math.round((12 + level * 9) * (0.8 + Math.random() * 0.4));
     const resMult = isCamp ? 95 : 70;
-    const lootBonus = 1 + paragonMultipliers(s).loot;
+    const lootBonus = 1 + paragonMultipliers(s).loot + academyBuffs(s).loot;
     loot.gold = Math.round(goldLoot * lootBonus);
     loot.iron = Math.round(resMult * level * (0.7 + Math.random() * 0.6) * lootBonus);
     loot.wood = Math.round(resMult * level * (0.7 + Math.random() * 0.6) * lootBonus);
@@ -502,7 +510,7 @@ function resolvePlayerBattle(
   const def = Math.max(50, enemy.power) * (0.92 + Math.random() * 0.16);
   const win = atk > def;
 
-  const formLossCut = (FORMATIONS.find((f) => f.id === formationId)?.lossReduction ?? 0) + paragonMultipliers(s).lossReduction;
+  const formLossCut = (FORMATIONS.find((f) => f.id === formationId)?.lossReduction ?? 0) + paragonMultipliers(s).lossReduction + academyBuffs(s).lossCut;
   const lossFrac = (win
     ? Math.min(0.6, 0.08 + 0.35 * (def / Math.max(atk, 1)))
     : 0.45 + Math.random() * 0.25) * Math.max(0.2, 1 - formLossCut);
@@ -522,7 +530,7 @@ function resolvePlayerBattle(
   const loot: Partial<Resources> = {};
   if (win) {
     const lvl = Math.max(1, Math.round(enemy.power / 400));
-    const lootBonus = 1 + paragonMultipliers(s).loot;
+    const lootBonus = 1 + paragonMultipliers(s).loot + academyBuffs(s).loot;
     loot.gold = Math.round((10 + lvl * 8) * lootBonus);
     loot.iron = Math.round(120 * lvl * (0.7 + Math.random() * 0.6) * lootBonus);
     loot.wood = Math.round(120 * lvl * (0.7 + Math.random() * 0.6) * lootBonus);
@@ -997,6 +1005,26 @@ export const useGame = create<Store>((set, get) => {
         s.researchQueue.push({ id: uid(), research: r, targetLevel: target, startedAt: now, endsAt: now + dur });
       }),
 
+      // Академия (древо эпох): поднять ранг узла за очки знаний.
+      researchAcademy: (nodeId) => mutate((s) => {
+        const node = academyNode(nodeId);
+        if (!node) return;
+        if ((s.buildings.castle ?? 1) < node.era + 1) return;          // эра не открыта
+        if (!academyEraUnlocked(node.era, s.buildings.castle ?? 1)) return;
+        const cur = s.academy[nodeId] ?? 0;
+        if (cur >= ACADEMY_NODE_MAX) return;
+        if (!academyNodeUnlocked(node, s.academy)) return;              // нужен предыдущий узел
+        if (academyAvailablePoints(s) < node.cost) return;             // не хватает очков
+        s.academy[nodeId] = cur + 1;
+      }),
+
+      // Полный сброс Академии (очки знаний возвращаются).
+      resetAcademy: () => mutate((s) => {
+        if (Object.keys(s.academy).length === 0) return;
+        s.academy = {};
+        pushLog(s, '📜', 'Древо Академии сброшено — очки знаний возвращены.', 'info');
+      }),
+
       trainUnits: (unitId, count) => mutate((s) => {
         if (count <= 0) return;
         if ((s.buildings.barracks ?? 0) < 1) return;
@@ -1082,7 +1110,7 @@ export const useGame = create<Store>((set, get) => {
           s.shieldUntil = 0; // атака снимает собственный щит — сразу можно надеть новый
           pushLog(s, '⚠️', 'Твой щит снят: ты начал атаку.', 'info');
         }
-        const dur = marchTimeMs(s.playerPos, pos, 1 + heroBuffs(s).marchSpeed);
+        const dur = marchTimeMs(s.playerPos, pos, 1 + heroBuffs(s).marchSpeed + academyBuffs(s).marchSpeed);
         s.marches.push({ id: uid(), targetId, targetKind: target.kind, units, formationId, startedAt: now, endsAt: now + dur });
         const label = target.kind === 'camp' ? campName(target.camp!.level) : `замку ${target.bot!.name}`;
         pushLog(s, '🐎', `Армия выступила к ${label}`, 'battle');
@@ -1266,7 +1294,7 @@ export const useGame = create<Store>((set, get) => {
           s.shieldUntil = 0; // атака снимает свой щит
           pushLog(s, '⚠️', 'Твой щит снят: ты начал атаку.', 'info');
         }
-        const dur = marchTimeMs(s.playerPos, { x: enemy.x, y: enemy.y }, 1 + heroBuffs(s).marchSpeed);
+        const dur = marchTimeMs(s.playerPos, { x: enemy.x, y: enemy.y }, 1 + heroBuffs(s).marchSpeed + academyBuffs(s).marchSpeed);
         s.marches.push({ id: uid(), targetId: enemy.id, targetKind: 'player', units, formationId, enemy, startedAt: now, endsAt: now + dur });
         pushLog(s, '🐎', `Армия выступила к замку лорда ${enemy.nick}`, 'battle');
       }),

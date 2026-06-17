@@ -2,6 +2,7 @@ import { BUILDINGS, CAMP_REGEN_H, FACTIONS, RESEARCH, MARCH_SECONDS_PER_100PX, B
 import { unitById } from './units';
 import { paragonMultipliers, paragonSpent } from './paragon';
 import { BuffManager, heroBuffs, heroCommand } from './hero';
+import { academyBuffs, academyClassAtk, academyProdMult } from './academy';
 import type { Bot, BuildingDef, BuildingId, Camp, GameState, Resource, ResourceBuildingId, Resources, UnitDef } from './types';
 
 export const HOUR = 3600_000;
@@ -25,17 +26,18 @@ export function buildSpeedMult(s: GameState): number {
   const f = FACTIONS[s.faction];
   const research = 1 + RESEARCH.construction.perLevel * (s.research.construction ?? 0);
   const bless = s.blessing?.buildMult && s.blessing.endsAt > Date.now() ? s.blessing.buildMult : 1;
-  return f.buildSpeed * research * bless * (1 + paragonMultipliers(s).build) * (1 + heroBuffs(s).constructionSpeed);
+  return f.buildSpeed * research * bless * (1 + paragonMultipliers(s).build)
+    * (1 + heroBuffs(s).constructionSpeed) * (1 + academyBuffs(s).buildSpeed);
 }
 
 export function researchSpeedMult(s: GameState): number {
   return FACTIONS[s.faction].researchSpeed * (1 + 0.04 * Math.max(0, (s.buildings.academy ?? 1) - 1))
-    * (1 + paragonMultipliers(s).research) * (1 + heroBuffs(s).researchSpeed);
+    * (1 + paragonMultipliers(s).research) * (1 + heroBuffs(s).researchSpeed) * (1 + academyBuffs(s).researchSpeed);
 }
 
 export function trainSpeedMult(s: GameState): number {
   return (1 + 0.05 * Math.max(0, (s.buildings.barracks ?? 0) - 1))
-    * (1 + paragonMultipliers(s).train) * (1 + heroBuffs(s).trainingSpeed);
+    * (1 + paragonMultipliers(s).train) * (1 + heroBuffs(s).trainingSpeed) * (1 + academyBuffs(s).trainSpeed);
 }
 
 // ---------- Доход ресурсов ----------
@@ -45,6 +47,7 @@ export function productionPerHour(s: GameState, now: number): Resources {
   const bless = s.blessing?.incomeMult && s.blessing.endsAt > now ? s.blessing.incomeMult : 1;
   const paragon = 1 + paragonMultipliers(s).income;
   const hero = 1 + heroBuffs(s).resourceProduction;
+  const ab = academyBuffs(s);
   const out: Resources = { iron: 0, wood: 0, silver: 0, food: 0, gold: 0 };
   // Добыча идёт с застроенных участков ресурсной зоны (любое число копий каждого типа).
   for (const plot of s.resourceZone ?? []) {
@@ -53,7 +56,8 @@ export function productionPerHour(s: GameState, now: number): Resources {
     if (!def.produces || !def.baseRate) continue;
     const rate = def.baseRate * Math.pow(def.rateGrowth ?? 1.45, plot.level - 1);
     const factionMult = f.incomeBonus[def.produces] ?? 1;
-    out[def.produces] += rate * factionMult * economy * bless * paragon * hero;
+    const academy = 1 + academyProdMult(ab, def.produces);
+    out[def.produces] += rate * factionMult * economy * bless * paragon * hero * academy;
   }
   return out;
 }
@@ -79,12 +83,13 @@ export function armyAttack(s: GameState, units: Record<string, number>, now: num
   const bless = s.blessing?.attackMult && s.blessing.endsAt > now ? s.blessing.attackMult : 1;
   const paragon = 1 + paragonMultipliers(s).attack;
   const hb = heroBuffs(s);
+  const ab = academyBuffs(s);
   let total = 0;
   for (const [id, n] of Object.entries(units)) {
     if (n <= 0) continue;
     const u = unitDef(id);
     const clsBonus = f.attackBonus[u.cls] ?? 1;
-    total += u.attack * n * clsBonus * (1 + BuffManager.classAttack(hb, u.cls));
+    total += u.attack * n * clsBonus * (1 + BuffManager.classAttack(hb, u.cls) + academyClassAtk(ab, u.cls));
   }
   return total * research * bless * paragon;
 }
@@ -94,11 +99,12 @@ export function armyDefense(s: GameState, units: Record<string, number>, now: nu
   const bless = s.blessing?.defenseMult && s.blessing.endsAt > now ? s.blessing.defenseMult : 1;
   const paragon = 1 + paragonMultipliers(s).defense;
   const hb = heroBuffs(s);
+  const ab = academyBuffs(s);
   let total = 0;
   for (const [id, n] of Object.entries(units)) {
     if (n <= 0) continue;
     const u = unitDef(id);
-    total += u.defense * n * (1 + BuffManager.classDefense(hb, u.cls));
+    total += u.defense * n * (1 + BuffManager.classDefense(hb, u.cls) + ab.troopDef);
   }
   return total * research * bless * paragon;
 }
@@ -132,9 +138,9 @@ export function powerBreakdown(s: GameState): Record<string, number> {
 
 export function marchCapacity(s: GameState): number {
   const base = 50 + (s.buildings.castle ?? 1) * 25;
-  // Герой: % к вместимости (Тактик/таланты) + плоский бонус от атрибута «Командование».
-  const heroMult = 1 + heroBuffs(s).marchCapacity;
-  return Math.floor(base * FACTIONS[s.faction].marchBonus * heroMult) + heroCommand(s);
+  // Герой/Академия: % к вместимости + плоский бонус от атрибута «Командование».
+  const mult = 1 + heroBuffs(s).marchCapacity + academyBuffs(s).marchCap;
+  return Math.floor(base * FACTIONS[s.faction].marchBonus * mult) + heroCommand(s);
 }
 
 // ---------- Боты ----------

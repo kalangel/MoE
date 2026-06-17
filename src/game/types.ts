@@ -259,6 +259,7 @@ export interface GameState {
   onboarded: boolean;             // стартовый туториал пройден
   tutorialStep: TutorialStep | null; // активный шаг онбординга (null = не активен)
   research: Record<ResearchId, number>;
+  academy: Record<string, number>;   // Академия: nodeId → ранг (древо эпох)
   army: Record<string, number>;
   buildQueue: BuildTask[];
   researchQueue: ResearchTask[];

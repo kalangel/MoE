@@ -1197,6 +1197,95 @@ h1, h2, h3, .serif { font-family: var(--serif); }
 .rep-enemy { border-left-color: var(--red); }
 .rep-enemy .rep-text { color: #f0b3b3; }
 
+/* ---------- Академия: древо эпох ---------- */
+.ac-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 10px; }
+.ac-head h3 { color: var(--gold-lt); }
+.ac-eras { display: grid; grid-template-columns: repeat(5, 1fr); gap: 6px; }
+.ac-era {
+  display: flex; flex-direction: column; align-items: center; gap: 1px;
+  background: linear-gradient(180deg, #2c3644, #222b38); border: 1px solid #46566c;
+  border-radius: 8px; padding: 6px 2px; cursor: pointer; font-family: inherit;
+  color: #e3e9f1; transition: all 0.15s;
+}
+.ac-era .ac-era-rom { font-family: var(--serif); font-size: 17px; font-weight: 800; }
+.ac-era .ac-era-name { font-size: 10px; opacity: 0.85; }
+.ac-era.sel { background: linear-gradient(180deg, var(--gold-lt), var(--brass)); color: #1a1206; border-color: var(--gold-lt); }
+.ac-era.locked { opacity: 0.5; }
+.ac-lore {
+  font-size: 12px; font-style: italic; color: var(--parch);
+  margin: 8px 0 10px; text-align: center;
+}
+
+.ac-branches { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+@media (max-width: 720px) { .ac-branches { grid-template-columns: 1fr; } }
+.ac-branch {
+  background: #11161d; border: 1px solid var(--border);
+  border-top: 3px solid var(--bc, var(--border)); border-radius: 10px; overflow: hidden;
+}
+.ac-branch-head {
+  font-size: 12.5px; font-weight: 800; color: var(--bc, var(--gold-lt));
+  padding: 7px 8px; text-align: center; background: rgba(255,255,255,0.03);
+  border-bottom: 1px solid var(--border);
+}
+.ac-branch-list { max-height: 360px; overflow-y: auto; padding: 6px; display: flex; flex-direction: column; gap: 5px; }
+.ac-node {
+  display: flex; align-items: center; gap: 7px; text-align: left;
+  background: #1b222c; border: 1px solid var(--border); border-radius: 8px;
+  padding: 6px 8px; cursor: pointer; font-family: inherit; color: var(--text); transition: all 0.12s;
+}
+.ac-node.buyable { border-color: var(--bc, var(--gold)); box-shadow: 0 0 0 1px var(--bc, var(--gold)) inset; }
+.ac-node.maxed { opacity: 0.85; border-color: var(--gold-dk); }
+.ac-node.locked { opacity: 0.5; cursor: not-allowed; }
+.ac-node:disabled { cursor: not-allowed; }
+.ac-node-ic { font-size: 16px; width: 18px; text-align: center; }
+.ac-node-main { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.ac-node-name { font-size: 12px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.ac-node-sub { font-size: 10.5px; color: var(--green); }
+.ac-node-rank { display: flex; gap: 3px; }
+.ac-pip { width: 7px; height: 7px; border-radius: 50%; background: #2d3744; border: 1px solid var(--border); }
+.ac-pip.on { background: var(--gold); border-color: var(--gold-lt); }
+
+/* ---------- Почта в стиле Gmail (адаптировано под игру) ---------- */
+.gm-toolbar {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 8px 12px; margin-bottom: 8px;
+  background: linear-gradient(180deg, #2c2031, #1d1622);
+  border: 1px solid var(--gold-dk); border-radius: 10px;
+}
+.gm-tb-title { font-family: var(--serif); font-weight: 800; color: var(--gold-lt); }
+.gm-tb-count { font-size: 11.5px; color: #b39b6a; }
+.gm-list {
+  background: #14181f; border: 1px solid var(--border); border-radius: 10px; overflow: hidden;
+}
+.gm-row {
+  display: flex; align-items: center; gap: 8px;
+  padding: 9px 10px; border-bottom: 1px solid #222b36;
+  font-size: 13px; cursor: default; transition: background 0.1s;
+}
+.gm-row:last-child { border-bottom: none; }
+.gm-row:nth-child(even) { background: rgba(255,255,255,0.015); }
+.gm-row:hover { background: rgba(255,255,255,0.05); }
+.gm-row.unread { background: rgba(245,197,66,0.06); }
+.gm-row.unread .gm-from, .gm-row.unread .gm-msg { font-weight: 700; color: #fff; }
+.gm-star { color: #5a6675; font-size: 13px; }
+.gm-row.unread .gm-star { color: var(--gold); }
+.gm-from { flex: 0 0 96px; font-weight: 600; color: var(--parch); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.gm-from.gm-blue { color: #6fa6e8; }
+.gm-from.gm-red { color: #e88; }
+.gm-from.gm-green { color: #6fd089; }
+.gm-from.gm-gold { color: var(--gold-lt); }
+.gm-from.gm-slate { color: #9fb0c2; }
+.gm-msg { flex: 1; min-width: 0; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.gm-time { flex: 0 0 auto; font-size: 11px; color: #8390a0; }
+@media (max-width: 460px) {
+  .gm-from { flex-basis: 70px; }
+  .gm-msg { white-space: normal; }
+}
+
+/* лёгкая полировка строк-списков под «инбокс» */
+.wrow { transition: border-color 0.12s, transform 0.06s; }
+.wrow:hover { border-color: var(--gold-dk); }
+
 h1.title {
   font-size: clamp(26px, 5vw, 42px);
   background: linear-gradient(180deg, #f8e7b0, #c89b2a);
@@ -1421,11 +1510,22 @@ h1.title {
 /* --- Вкладки --- */
 .hero-tabs { display: flex; gap: 6px; margin-bottom: 12px; flex-wrap: wrap; }
 .hero-tab {
-  flex: 1; min-width: 84px; background: var(--panel2); border: 1px solid var(--border);
-  border-radius: 8px; padding: 8px 6px; font-size: 12.5px; font-weight: 600;
-  color: var(--muted); cursor: pointer; font-family: inherit; transition: all 0.15s;
+  flex: 1; min-width: 84px;
+  background: linear-gradient(180deg, #2c3644, #222b38);
+  border: 1px solid #46566c;
+  border-radius: 8px; padding: 8px 6px; font-size: 12.5px; font-weight: 700;
+  color: #e3e9f1; cursor: pointer; font-family: inherit; transition: all 0.15s;
+  text-shadow: 0 1px 2px rgba(0,0,0,0.6);
 }
-.hero-tab.sel { color: var(--gold-lt); border-color: var(--gold-dk); background: #2a2417; }
+.hero-tab:hover { border-color: #6f8db5; }
+.hero-tab.sel {
+  color: #1a1206; border-color: var(--gold-lt);
+  background: linear-gradient(180deg, var(--gold-lt), var(--brass));
+  text-shadow: none;
+}
+/* читаемость во вкладках и на светлой странице, и на тёмной */
+.page-body .hero-tab { color: #e3e9f1; }
+.page-body .hero-tab.sel { color: #1a1206; }
 
 /* --- Атрибуты --- */
 .hero-attrs { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; }
