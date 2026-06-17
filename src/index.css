@@ -1273,3 +1273,112 @@ h1.title {
   font-size: 14.5px; line-height: 1.5; font-style: italic;
   color: var(--parch); margin-bottom: 14px;
 }
+
+/* ============================================================
+   ГЕРОЙ (Champion System)
+   ============================================================ */
+/* --- Оверлей выбора героя --- */
+.hero-pick-backdrop { z-index: 130; }
+.hero-pick { width: min(760px, 96vw); border-color: var(--gold-dk); }
+.hero-pick-grid {
+  display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; margin-bottom: 12px;
+}
+@media (min-width: 720px) { .hero-pick-grid { grid-template-columns: repeat(4, 1fr); } }
+.hero-card {
+  display: flex; flex-direction: column; align-items: center; text-align: center;
+  background: var(--panel2); border: 1.5px solid var(--border); border-radius: 12px;
+  padding: 12px 10px; cursor: pointer; font-family: inherit; color: var(--text);
+  transition: border-color 0.15s, transform 0.1s, box-shadow 0.15s;
+}
+.hero-card:hover { border-color: var(--hc); }
+.hero-card.sel { border-color: var(--hc); box-shadow: 0 0 0 2px var(--hc) inset, 0 8px 24px rgba(0,0,0,0.5); }
+.hero-card-portrait {
+  width: 60px; height: 60px; border-radius: 50%;
+  display: flex; align-items: center; justify-content: center; font-size: 32px;
+  background: radial-gradient(circle at 50% 35%, color-mix(in srgb, var(--hc) 55%, #1a212b), #14181f);
+  border: 2px solid var(--hc); margin-bottom: 8px;
+}
+.hero-card-name { font-family: var(--serif); font-size: 16px; color: var(--gold-lt); }
+.hero-card-title { font-size: 11.5px; color: var(--muted); margin-bottom: 8px; }
+.hero-card-buffs { list-style: none; padding: 0; margin: 0 0 8px; font-size: 12px; }
+.hero-card-buffs li { color: var(--green); margin: 2px 0; }
+.hero-card-blurb { font-size: 11px; color: var(--parch); line-height: 1.4; opacity: 0.85; }
+
+/* --- Шапка героя на странице --- */
+.hero-hero {
+  display: flex; align-items: center; gap: 12px; margin-bottom: 12px;
+  background: linear-gradient(90deg, color-mix(in srgb, var(--hc) 28%, var(--panel)), var(--panel));
+  border: 1px solid var(--border); border-radius: 12px; padding: 12px;
+}
+.hero-hero-portrait {
+  position: relative; width: 56px; height: 56px; border-radius: 50%; flex-shrink: 0;
+  display: flex; align-items: center; justify-content: center; font-size: 30px;
+  background: radial-gradient(circle at 50% 35%, color-mix(in srgb, var(--hc) 55%, #1a212b), #14181f);
+  border: 2px solid var(--hc);
+}
+.hero-hero-lvl {
+  position: absolute; bottom: -4px; right: -4px; min-width: 22px; text-align: center;
+  background: #0d1320; border: 1px solid var(--gold); border-radius: 11px;
+  font-size: 12px; font-weight: 700; color: var(--gold-lt); padding: 0 5px;
+}
+.hero-hero-main { flex: 1; }
+.hero-hero-name { font-family: var(--serif); font-size: 18px; color: var(--gold-lt); }
+.hero-hero-title { font-size: 12px; color: var(--muted); }
+
+/* --- Вкладки --- */
+.hero-tabs { display: flex; gap: 6px; margin-bottom: 12px; flex-wrap: wrap; }
+.hero-tab {
+  flex: 1; min-width: 84px; background: var(--panel2); border: 1px solid var(--border);
+  border-radius: 8px; padding: 8px 6px; font-size: 12.5px; font-weight: 600;
+  color: var(--muted); cursor: pointer; font-family: inherit; transition: all 0.15s;
+}
+.hero-tab.sel { color: var(--gold-lt); border-color: var(--gold-dk); background: #2a2417; }
+
+/* --- Атрибуты --- */
+.hero-attrs { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; }
+@media (max-width: 460px) { .hero-attrs { grid-template-columns: repeat(2, 1fr); } }
+.hero-attr {
+  display: flex; flex-direction: column; align-items: center; gap: 2px;
+  background: var(--panel2); border: 1px solid var(--border); border-radius: 10px; padding: 10px 6px;
+}
+.hero-attr-ic { font-size: 20px; }
+.hero-attr-val { font-size: 17px; font-weight: 700; color: var(--gold-lt); }
+.hero-attr-name { font-size: 11px; color: var(--muted); }
+
+/* --- Энергия / бонусы --- */
+.hero-energy { margin-bottom: 4px; }
+.hero-buffs { display: flex; flex-wrap: wrap; gap: 6px; }
+.hero-buff-chip {
+  display: flex; align-items: center; gap: 6px; font-size: 12px;
+  background: var(--panel2); border: 1px solid var(--border); border-radius: 8px; padding: 5px 9px;
+}
+
+/* --- Смена героя --- */
+.hero-swap-row { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+.hero-swap-card {
+  display: flex; flex-direction: column; align-items: center; gap: 3px; text-align: center;
+  background: var(--panel2); border: 1px solid var(--border); border-radius: 10px;
+  padding: 9px 6px; cursor: pointer; font-family: inherit; color: var(--text); transition: all 0.15s;
+}
+.hero-swap-card:hover:not(:disabled) { border-color: var(--hc); }
+.hero-swap-card:disabled { opacity: 0.5; cursor: not-allowed; }
+.hero-swap-ic { font-size: 22px; }
+.hero-swap-name { font-size: 12px; font-weight: 600; color: var(--gold-lt); }
+.hero-swap-sig { font-size: 10.5px; color: var(--green); }
+
+/* --- Кузница --- */
+.forge-slots { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-bottom: 6px; }
+.forge-slot {
+  display: flex; flex-direction: column; align-items: center; gap: 4px;
+  aspect-ratio: 1 / 1; background: radial-gradient(120% 90% at 50% 25%, #28323f, #1a212b);
+  border: 1.5px dashed var(--border); border-radius: 10px; padding: 6px;
+  cursor: pointer; font-family: inherit; color: var(--text); transition: all 0.15s;
+  justify-content: center;
+}
+.forge-slot.filled { border-style: solid; border-color: var(--rc, var(--border)); }
+.forge-slot.sel { box-shadow: 0 0 0 2px var(--gold) inset; }
+.forge-slot-ic { font-size: 26px; }
+.forge-slot-name { font-size: 10.5px; color: var(--muted); text-align: center; line-height: 1.2; }
+
+.exped-row { align-items: flex-start; }
+.exped-row .wr-ic { font-size: 20px; }

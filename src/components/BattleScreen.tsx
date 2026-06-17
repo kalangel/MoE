@@ -3,6 +3,7 @@ import { motion } from 'framer-motion';
 import { useGame } from '../game/store';
 import { FACTIONS } from '../game/config';
 import { fmt, fmtDuration, marchCapacity, marchTimeMs } from '../game/balance';
+import { heroBuffs } from '../game/hero';
 import {
   CLASS_META, CLASS_ORDER, FORMATIONS, FRAGILE_CLASSES, FRONT_SLOTS, RANK_ROMAN,
   SLOTS, attackPower, defenderComposition, formationUnlocked, unitById,
@@ -49,7 +50,7 @@ export default function BattleScreen({ target, onClose }: { target: MapTarget; o
     }),
   ), [flattened, formationId, gear]); // eslint-disable-line
 
-  const marchMs = marchTimeMs(s.playerPos, { x: target.x, y: target.y });
+  const marchMs = marchTimeMs(s.playerPos, { x: target.x, y: target.y }, 1 + heroBuffs(s).marchSpeed);
   const alreadyMarching = s.marches.some((m) => m.targetId === target.id);
 
   const available = (id: string) => (s.army[id] ?? 0) - (usedPerUnit[id] ?? 0);

@@ -191,6 +191,52 @@ export interface DailyQuestState {
 
 export type View = 'kingdom' | 'map' | 'army' | 'research' | 'quests';
 
+// ============================================================
+//  ГЕРОЙ (Champion System)
+// ============================================================
+export type HeroId = 'economist' | 'commander' | 'logistician' | 'tactician';
+
+/** Слоты экипировки героя (Кузница). Два слота под аксессуары. */
+export type EquipSlot = 'weapon' | 'armor' | 'helmet' | 'boots' | 'acc1' | 'acc2';
+/** Категория предмета (аксессуар ложится в acc1/acc2). */
+export type GearSlot = 'weapon' | 'armor' | 'helmet' | 'boots' | 'accessory';
+
+/**
+ * Единый словарь множителей-баффов героя (аддитивные доли, напр. 0.15 = +15%).
+ * Источники: пассивка архетипа + таланты + экипировка. Сводит BuffManager.
+ */
+export type HeroBuffKey =
+  // экономика
+  | 'resourceProduction' | 'constructionSpeed' | 'researchSpeed' | 'gatheringSpeed'
+  // поддержка
+  | 'trainingSpeed' | 'hospitalCapacity' | 'healingSpeed' | 'heroEnergy'
+  // военное (общее)
+  | 'marchSpeed' | 'marchCapacity'
+  // атака по родам войск
+  | 'infantryAttack' | 'cavalryAttack' | 'rangedAttack' | 'siegeAttack'
+  // защита по родам войск
+  | 'infantryDefense' | 'cavalryDefense' | 'rangedDefense' | 'siegeDefense'
+  // универсальные
+  | 'allTroopAttack' | 'allTroopDefense';
+
+export interface HeroExpedition {
+  id: string;
+  startedAt: number;
+  endsAt: number;
+}
+
+export interface HeroState {
+  id: HeroId;                                 // активный архетип
+  exp: number;                                // суммарный опыт (уровень выводится из него)
+  level: number;                              // кэш уровня (синхронизируется с exp)
+  talents: Record<string, number>;            // nodeId → ранг
+  equipment: Record<EquipSlot, string | null>; // слот → gearId
+  gearInventory: Record<string, number>;       // gearId → кол-во (не надетое)
+  energy: number;                             // текущая энергия героя
+  energyAt: number;                           // момент последнего пересчёта энергии
+  expedition: HeroExpedition | null;          // активный поход (Sovereign Journey)
+}
+
 export interface GameState {
   started: boolean;
   playerName: string;
@@ -230,6 +276,8 @@ export interface GameState {
     scoutsSent: number; lootedResources: number; raidsSuffered: number;
   };
   paragon: { xp: number; nodes: Record<string, number>; abilities: Record<string, number> };
+  hero: HeroState | null;   // активный герой (null до выбора)
+  heroOffer: boolean;       // показать оверлей выбора героя (после первой Фермы)
   inventory: Record<string, number>;
   lotteryDate: string;   // YYYY-MM-DD последнего розыгрыша
   mailSeen: number;      // timestamp последнего просмотра почты

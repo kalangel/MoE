@@ -1,6 +1,7 @@
 import { useGame } from '../game/store';
 import { DAILY_QUESTS } from '../game/config';
 import { PARAGON_CASTLE_REQ, availablePoints } from '../game/paragon';
+import { heroAvailablePoints } from '../game/hero';
 import { useUI } from '../ui/uiStore';
 import Medallion from './Medallion';
 
@@ -13,6 +14,8 @@ export default function BottomNav() {
   const lotteryReady = s.lotteryDate !== todayStr();
   const paragonLocked = (s.buildings.castle ?? 1) < PARAGON_CASTLE_REQ;
   const pts = availablePoints(s);
+  const heroPts = s.hero ? heroAvailablePoints(s.hero) : 0;
+  const heroBadge = !s.hero ? (s.heroOffer ? 1 : 0) : heroPts;
   const p = ui.page;
   const onCity = ui.screen === 'kingdom' && !p;
 
@@ -21,6 +24,7 @@ export default function BottomNav() {
       <Medallion icon="🏰" label="Город" size={44} active={onCity} onClick={() => ui.setScreen('kingdom')} />
       <Medallion icon="⚔" label="Кампания" size={44} badge={claimable} active={p === 'campaign'} onClick={() => ui.openPage('campaign')} />
       <Medallion icon="🗡️" label="Армия" size={44} badge={s.trainQueue.length} active={p === 'army'} onClick={() => ui.openPage('army')} />
+      <Medallion icon="🦸" label="Герой" size={44} badge={heroBadge} active={p === 'hero'} onClick={() => ui.openPage('hero')} />
       <Medallion icon="🛡️" label="Союз" size={44} badge={20} active={p === 'alliance'} onClick={() => ui.openPage('alliance')} />
       <Medallion icon="🧰" label="Предметы" size={44} badge={itemCount} active={p === 'items'} onClick={() => ui.openPage('items')} />
       <Medallion icon="✉️" label="Почта" size={44} badge={unread} active={p === 'mail'} onClick={() => ui.openPage('mail')} />

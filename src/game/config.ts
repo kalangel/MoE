@@ -282,15 +282,22 @@ export interface ItemDef {
   name: string;
   icon: string;
   desc: string;
-  kind: 'speedup' | 'shield' | 'respack' | 'silverbag';
+  kind: 'speedup' | 'shield' | 'respack' | 'silverbag' | 'heroToken' | 'heroExp' | 'heroEnergy';
 }
 export const ITEM_DEFS: ItemDef[] = [
   { id: 'speedup60', name: 'Ускорение 1ч', icon: '⏱️', desc: 'Сокращает активный таймер на 60 минут', kind: 'speedup' },
   { id: 'shield8', name: 'Щит 8ч', icon: '🛡️', desc: 'Мгновенно ставит щит на 8 часов', kind: 'shield' },
   { id: 'respack', name: 'Ресурсный пак', icon: '📦', desc: '+5000 железа, дерева, еды', kind: 'respack' },
   { id: 'silverbag', name: 'Мешок серебра', icon: '💰', desc: '+3000 серебра', kind: 'silverbag' },
+  // ---- Предметы героя ----
+  { id: 'heroSwapToken', name: 'Печать смены героя', icon: '🔁', desc: 'Позволяет сменить активного героя. Применяется в окне «Герой».', kind: 'heroToken' },
+  { id: 'heroTome', name: 'Том героя', icon: '📕', desc: '+500 опыта активному герою', kind: 'heroExp' },
+  { id: 'heroBrew', name: 'Эликсир энергии', icon: '⚡', desc: '+50 энергии героя', kind: 'heroEnergy' },
 ];
-export const START_INVENTORY: Record<string, number> = { speedup60: 3, shield8: 1, respack: 2, silverbag: 2 };
+export const START_INVENTORY: Record<string, number> = {
+  speedup60: 3, shield8: 1, respack: 2, silverbag: 2,
+  heroSwapToken: 1, heroTome: 2, heroBrew: 1,
+};
 
 // ---- Лотерея (ежедневный розыгрыш) ----
 export interface LotteryPrize { label: string; icon: string; apply: 'gold' | 'silver' | 'iron' | 'wood' | 'food' | 'item'; amount: number; itemId?: string }

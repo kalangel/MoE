@@ -1,4 +1,5 @@
 import { BUILDINGS, FACTIONS, RESOURCE_BUILDING_IDS } from './config';
+import { HEROES, heroEnergyMax, heroLevelInfo, settleHeroEnergy } from './hero';
 import { HOUR, fmt, powerBreakdown } from './balance';
 import { freshState, saveNow, useGame } from './store';
 import { useOnlineStore } from '../online/onlineStore';
@@ -50,7 +51,7 @@ function buildHelp(level: Level): string[] {
   if (has(level, 'dev')) lines.push(
     '— Разработчик (dev) —',
     'give <ресурс|all> <n> · army <тип> <n> · build <здание> <ур>|max',
-    'shield <ч>|off · faction <id> · paragon <n> · clearqueue · god · reset',
+    'shield <ч>|off · faction <id> · paragon <n> · hero <exp|energy|token> <n> · clearqueue · god · reset',
     'grant <ник|uid> <view|helper> · revoke <ник|uid> <право>',
     'gift <ник> <ресурс> <n> (из воздуха) · players · lock',
   );
@@ -323,6 +324,36 @@ export async function execCommand(raw: string): Promise<ConsoleLine[]> {
         for (const u of FACTIONS[s.faction].units) s.army[u.id] = (s.army[u.id] ?? 0) + 500;
       });
       return out(['⚡ Режим бога: 999 999 ресурсов, здания макс., ресурсная зона застроена, +500 каждого юнита.']);
+    }
+
+    case 'hero': {
+      if (!has(level, 'dev')) return noPerm('dev');
+      const sub = largs[0];
+      const s0 = useGame.getState();
+      if (!sub || sub === 'info') {
+        if (!s0.hero) return out(['Герой ещё не выбран.']);
+        const li = heroLevelInfo(s0.hero.exp);
+        return out([
+          `Герой: ${HEROES[s0.hero.id].name} (${HEROES[s0.hero.id].title})`,
+          `Уровень ${li.level} · опыт ${li.into}/${li.need} · энергия ${Math.floor(s0.hero.energy)}/${heroEnergyMax(s0)}`,
+        ]);
+      }
+      if (!s0.hero) return err('Сначала выбери героя (построй Ферму).');
+      const n = parseCount(args[1]);
+      if (sub === 'exp') {
+        if (n === null) return err('Использование: hero exp <число>');
+        mutate((s) => { if (s.hero) { s.hero.exp = Math.max(0, s.hero.exp + n); s.hero.level = heroLevelInfo(s.hero.exp).level; } });
+        return out([`Опыт героя: ${n >= 0 ? '+' : ''}${n} → уровень ${heroLevelInfo(useGame.getState().hero!.exp).level}`]);
+      }
+      if (sub === 'energy') {
+        mutate((s) => { if (s.hero) { settleHeroEnergy(s, Date.now()); s.hero.energy = largs[1] === 'max' ? heroEnergyMax(s) : Math.max(0, s.hero.energy + (n ?? 0)); } });
+        return out([`Энергия героя → ${Math.floor(useGame.getState().hero!.energy)}`]);
+      }
+      if (sub === 'token') {
+        mutate((s) => { s.inventory.heroSwapToken = (s.inventory.heroSwapToken ?? 0) + (n ?? 1); });
+        return out([`Печати смены героя: +${n ?? 1}`]);
+      }
+      return err('Использование: hero info | hero exp <n> | hero energy <n>|max | hero token <n>');
     }
 
     case 'reset': {
