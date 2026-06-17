@@ -20,15 +20,15 @@ import {
   paragonMultipliers, paragonNode,
 } from './paragon';
 import {
-  EXPEDITION_CASTLE_REQ, HERO_ENERGY_BASE, HERO_STARTER_GEAR, HEROES,
-  expeditionDef, gearDef, heroAvailablePoints, heroBuffs, heroEnergyMax,
-  heroHasFarm, heroLevelInfo, heroNodeCost, heroNodeUnlocked, heroTalentNode,
+  EXPEDITION_CASTLE_REQ, HERO_ENERGY_BASE, HERO_RESET_COST_GOLD, HERO_STARTER_GEAR, HEROES,
+  activeHero, emptyEquipment, expeditionDef, freshHeroSystem, gearDef, heroAvailablePoints,
+  heroBuffs, heroEnergyMax, heroLevelInfo, heroNodeCost, heroNodeUnlocked, heroTalentNode,
   settleHeroEnergy, slotAccepts,
 } from './hero';
 import type {
   BattleReport, Bot, BuildingId, Camp, EnemySnapshot, EquipSlot, FactionId, GameState, HeroId,
-  HeroState, LogEntry, MarchTask, ResearchId, Resource, ResourceBuildingId, ResourcePlot,
-  Resources, ScoutKind, TargetKind,
+  HeroInstance, HeroSystemData, LogEntry, MarchTask, ResearchId, Resource, ResourceBuildingId,
+  ResourcePlot, Resources, ScoutKind, TargetKind,
 } from './types';
 
 const SAVE_KEY = 'march-of-empires-save-v1';
@@ -56,6 +56,7 @@ interface Actions {
   // ---- Герой (Champion System) ----
   chooseInitialHero: (id: HeroId) => void;
   swapHero: (id: HeroId) => void;
+  unlockHero: (id: HeroId) => void;
   allocateHeroTalent: (nodeId: string) => void;
   resetHeroTalents: () => void;
   equipHeroGear: (slot: EquipSlot, gearId: string) => void;
@@ -138,6 +139,28 @@ function zoneFromLegacy(buildings?: Partial<Record<BuildingId, number>>): Resour
   return zone;
 }
 
+/**
+ * Миграция системы героев. Поддерживает:
+ *  - новые сейвы (parsed.heroSystem) — берём как есть;
+ *  - сейвы предыдущей версии (parsed.hero — одиночный активный герой) — оборачиваем в коллекцию;
+ *  - отсутствие данных — пустая система (выбор ещё не сделан).
+ */
+function migrateHeroSystem(parsed: Record<string, unknown>, now: number): HeroSystemData {
+  const hs = parsed.heroSystem as HeroSystemData | undefined;
+  if (hs && hs.heroes) return hs;
+  const old = parsed.hero as (Partial<HeroInstance> & { gearInventory?: Record<string, number> }) | null | undefined;
+  if (old && old.id) {
+    const inst: HeroInstance = {
+      id: old.id, exp: old.exp ?? 0, level: old.level ?? 1,
+      talents: old.talents ?? {}, equipment: old.equipment ?? emptyEquipment(),
+      energy: old.energy ?? HERO_ENERGY_BASE, energyAt: old.energyAt ?? now,
+      expedition: old.expedition ?? null,
+    };
+    return { selected: true, activeId: old.id, heroes: { [old.id]: inst }, gearInventory: old.gearInventory ?? {} };
+  }
+  return freshHeroSystem();
+}
+
 export function freshState(now: number): GameState {
   return {
     started: false,
@@ -181,8 +204,7 @@ export function freshState(now: number): GameState {
       scoutsSent: 0, lootedResources: 0, raidsSuffered: 0,
     },
     paragon: { xp: 0, nodes: {}, abilities: {} },
-    hero: null,
-    heroOffer: false,
+    heroSystem: freshHeroSystem(),
     inventory: { ...START_INVENTORY },
     lotteryDate: '',
     mailSeen: now,
@@ -219,9 +241,8 @@ function loadState(): GameState {
         // Туториал уже пройден всеми, у кого был старый сейв (нет поля resourceZone).
         onboarded: parsed.onboarded ?? (parsed.resourceZone ? false : true),
         tutorialStep: parsed.tutorialStep ?? null,
-        // Герой: новая система. Существующим игрокам с уже построенной Фермой сразу предлагаем выбор.
-        hero: parsed.hero ?? null,
-        heroOffer: parsed.heroOffer ?? (parsed.hero ? false : heroHasFarm(zone)),
+        // Система героев: доступна сразу; выбор стартового героя — при первом открытии меню.
+        heroSystem: migrateHeroSystem(parsed as Record<string, unknown>, now),
       } as GameState;
     }
   } catch (e) {
@@ -256,16 +277,27 @@ function addParagon(s: GameState, n: number) {
   s.paragon.xp += n;
 }
 
-/** Начисление опыта герою + синхронизация кэша уровня. Логирует левел-апы. */
+/** Начисление опыта активному герою + синхронизация кэша уровня. Логирует левел-апы. */
 function addHeroExp(s: GameState, n: number) {
-  if (!s.hero || n <= 0) return;
-  const before = heroLevelInfo(s.hero.exp).level;
-  s.hero.exp += n;
-  const after = heroLevelInfo(s.hero.exp).level;
-  s.hero.level = after;
+  const h = activeHero(s);
+  if (!h || n <= 0) return;
+  const before = heroLevelInfo(h.exp).level;
+  h.exp += n;
+  const after = heroLevelInfo(h.exp).level;
+  h.level = after;
   if (after > before) {
-    pushLog(s, '⭐', `${HEROES[s.hero.id].name} достигает ${after} уровня! +${after - before} очк. талантов`, 'info');
+    pushLog(s, '⭐', `${HEROES[h.id].name} достигает ${after} уровня! +${after - before} очк. талантов`, 'info');
   }
+}
+
+/** Разблокировать героя в коллекцию (для наград/событий/dev). Возвращает true, если новый. */
+function unlockHeroInternal(s: GameState, id: HeroId, now: number): boolean {
+  if (s.heroSystem.heroes[id]) return false;
+  s.heroSystem.heroes[id] = {
+    id, exp: 0, level: 1, talents: {}, equipment: emptyEquipment(),
+    energy: HERO_ENERGY_BASE, energyAt: now, expedition: null,
+  };
+  return true;
 }
 
 // ---------- Доход ресурсов и еда (БЕЗ дезертирства) ----------
@@ -300,34 +332,42 @@ function completeQueues(s: GameState, now: number, offline: boolean): BattleRepo
       s.buildQueue = s.buildQueue.filter((x) => x.id !== t.id);
       addParagon(s, 25 + t.targetLevel * 5);
       pushLog(s, '🏗️', `${BUILDINGS[t.building].name} — готово (ур. ${t.targetLevel})`, 'build');
-      // Первая построенная Ферма открывает выбор Героя (Champion System).
-      if (t.building === 'farm' && !s.hero && !s.heroOffer) {
-        s.heroOffer = true;
-        pushLog(s, '⭐', 'Ферма заложена. Ко двору прибыли герои — выбери защитника королевства!', 'info');
-      }
     }
   }
 
-  // Завершение похода героя (Sovereign Journey)
-  if (s.hero?.expedition && s.hero.expedition.endsAt <= now) {
-    const def = expeditionDef(s.hero.expedition.id);
-    s.hero.expedition = null;
-    if (def) {
-      const r = def.rewards;
-      addHeroExp(s, r.exp);
-      if (r.gold) s.resources.gold += r.gold;
-      if (r.iron) s.resources.iron += r.iron;
-      if (r.wood) s.resources.wood += r.wood;
-      if (r.silver) s.resources.silver += r.silver;
-      if (r.food) s.resources.food += r.food;
-      let gearMsg = '';
-      if (r.gearPool && r.gearPool.length && Math.random() < (r.gearChance ?? 0)) {
-        const gid = r.gearPool[Math.floor(Math.random() * r.gearPool.length)];
-        s.hero.gearInventory[gid] = (s.hero.gearInventory[gid] ?? 0) + 1;
-        gearMsg = ` Трофей: ${gearDef(gid)?.name ?? gid}!`;
-      }
-      pushLog(s, def.icon, `Поход «${def.name}» завершён. +${r.exp} опыта героя.${gearMsg}`, 'gold');
+  // Завершение походов героев (Sovereign Journeys) — по всей коллекции.
+  for (const hero of Object.values(s.heroSystem.heroes)) {
+    if (!hero.expedition || hero.expedition.endsAt > now) continue;
+    const def = expeditionDef(hero.expedition.id);
+    hero.expedition = null;
+    if (!def) continue;
+    const r = def.rewards;
+    // опыт получает именно вернувшийся герой
+    const before = heroLevelInfo(hero.exp).level;
+    hero.exp += r.exp;
+    hero.level = heroLevelInfo(hero.exp).level;
+    if (hero.level > before) pushLog(s, '⭐', `${HEROES[hero.id].name}: уровень ${hero.level}!`, 'info');
+    if (r.gold) s.resources.gold += r.gold;
+    if (r.iron) s.resources.iron += r.iron;
+    if (r.wood) s.resources.wood += r.wood;
+    if (r.silver) s.resources.silver += r.silver;
+    if (r.food) s.resources.food += r.food;
+    let extra = '';
+    if (r.gearPool && r.gearPool.length && Math.random() < (r.gearChance ?? 0)) {
+      const gid = r.gearPool[Math.floor(Math.random() * r.gearPool.length)];
+      s.heroSystem.gearInventory[gid] = (s.heroSystem.gearInventory[gid] ?? 0) + 1;
+      extra += ` Трофей: ${gearDef(gid)?.name ?? gid}!`;
     }
+    // шанс завербовать нового героя в коллекцию
+    if (r.recruit && Math.random() < (r.recruitChance ?? 0)) {
+      const locked = (Object.keys(HEROES) as HeroId[]).filter((id) => !s.heroSystem.heroes[id]);
+      if (locked.length) {
+        const id = locked[Math.floor(Math.random() * locked.length)];
+        unlockHeroInternal(s, id, now);
+        extra += ` К тебе примкнул новый герой: ${HEROES[id].name}!`;
+      }
+    }
+    pushLog(s, def.icon, `Поход «${def.name}» завершён. +${r.exp} опыта.${extra}`, 'gold');
   }
   // Исследования
   for (const t of [...s.researchQueue]) {
@@ -834,83 +874,94 @@ export const useGame = create<Store>((set, get) => {
       }),
 
       // ---------- Герой (Champion System) ----------
-      // Стартовый выбор героя (после первой Фермы). Выбор фиксируется.
+      // Стартовый выбор героя (при первом открытии меню). Выбор фиксируется,
+      // выбранный герой становится активным и единственным разблокированным.
       chooseInitialHero: (id) => mutate((s) => {
-        if (s.hero) return;                 // уже выбран — блокировка
-        if (!HEROES[id]) return;
+        if (s.heroSystem.selected || !HEROES[id]) return; // выбор уже сделан — блокировка
         const now = Date.now();
-        const hero: HeroState = {
-          id, exp: 0, level: 1, talents: {},
-          equipment: { weapon: null, armor: null, helmet: null, boots: null, acc1: null, acc2: null },
-          gearInventory: { ...HERO_STARTER_GEAR },
-          energy: HERO_ENERGY_BASE, energyAt: now, expedition: null,
-        };
-        s.hero = hero;
-        s.heroOffer = false;
+        unlockHeroInternal(s, id, now);
+        s.heroSystem.activeId = id;
+        s.heroSystem.selected = true;
+        s.heroSystem.gearInventory = { ...s.heroSystem.gearInventory, ...HERO_STARTER_GEAR };
         pushLog(s, HEROES[id].icon, `Герой избран: ${HEROES[id].name} — ${HEROES[id].title}.`, 'info');
       }),
 
-      // Смена активного героя за «Печать смены героя» (прогресс сохраняется).
+      // Сделать активным другого РАЗБЛОКИРОВАННОГО героя за «Печать смены героя».
       swapHero: (id) => mutate((s) => {
-        if (!s.hero || id === s.hero.id || !HEROES[id]) return;
+        if (!HEROES[id] || id === s.heroSystem.activeId) return;
+        if (!s.heroSystem.heroes[id]) return;            // герой должен быть в коллекции
         if ((s.inventory.heroSwapToken ?? 0) <= 0) return;
         s.inventory.heroSwapToken -= 1;
-        s.hero.id = id;
+        s.heroSystem.activeId = id;
         pushLog(s, '🔁', `Активный герой сменён: ${HEROES[id].name}.`, 'info');
       }),
 
-      // Вложить очко таланта (последовательное открытие в ветке, кап по очкам).
+      // Разблокировать героя в коллекцию (награды/события).
+      unlockHero: (id) => mutate((s) => {
+        if (!HEROES[id]) return;
+        if (unlockHeroInternal(s, id, Date.now())) {
+          pushLog(s, '⭐', `Новый герой в коллекции: ${HEROES[id].name}!`, 'info');
+        }
+      }),
+
+      // Вложить очко таланта активному герою (кап по очкам, последовательное открытие).
       allocateHeroTalent: (nodeId) => mutate((s) => {
-        if (!s.hero) return;
+        const h = activeHero(s);
+        if (!h) return;
         const node = heroTalentNode(nodeId);
         if (!node) return;
-        const cur = s.hero.talents[nodeId] ?? 0;
+        const cur = h.talents[nodeId] ?? 0;
         if (cur >= node.maxLevel) return;
-        if (!heroNodeUnlocked(node, s.hero.talents)) return;
+        if (!heroNodeUnlocked(node, h.talents)) return;
         const cost = heroNodeCost(node, cur);
-        if (heroAvailablePoints(s.hero) < cost) return;
-        s.hero.talents[nodeId] = cur + 1;
+        if (heroAvailablePoints(h) < cost) return;
+        h.talents[nodeId] = cur + 1;
       }),
 
-      // Сброс талантов (очки возвращаются).
+      // Сброс талантов активного героя за золото (очки возвращаются).
       resetHeroTalents: () => mutate((s) => {
-        if (!s.hero || Object.keys(s.hero.talents).length === 0) return;
-        s.hero.talents = {};
-        pushLog(s, '🔄', 'Таланты героя сброшены — очки возвращены.', 'info');
+        const h = activeHero(s);
+        if (!h || Object.keys(h.talents).length === 0) return;
+        if (s.resources.gold < HERO_RESET_COST_GOLD) return;
+        s.resources.gold -= HERO_RESET_COST_GOLD;
+        h.talents = {};
+        pushLog(s, '🔄', `Таланты сброшены за ${HERO_RESET_COST_GOLD} 👑 — очки возвращены.`, 'info');
       }),
 
-      // Надеть предмет в слот (текущий возвращается в инвентарь героя).
+      // Надеть предмет в слот активного героя (текущий уходит в общий склад).
       equipHeroGear: (slot, gearId) => mutate((s) => {
-        if (!s.hero) return;
-        if (!slotAccepts(slot, gearId)) return;
-        if ((s.hero.gearInventory[gearId] ?? 0) <= 0) return;
-        const prev = s.hero.equipment[slot];
-        if (prev) s.hero.gearInventory[prev] = (s.hero.gearInventory[prev] ?? 0) + 1;
-        s.hero.gearInventory[gearId] -= 1;
-        s.hero.equipment[slot] = gearId;
+        const h = activeHero(s);
+        if (!h || !slotAccepts(slot, gearId)) return;
+        if ((s.heroSystem.gearInventory[gearId] ?? 0) <= 0) return;
+        const prev = h.equipment[slot];
+        if (prev) s.heroSystem.gearInventory[prev] = (s.heroSystem.gearInventory[prev] ?? 0) + 1;
+        s.heroSystem.gearInventory[gearId] -= 1;
+        h.equipment[slot] = gearId;
       }),
 
-      // Снять предмет — возвращается в инвентарь героя.
+      // Снять предмет — возвращается в общий склад.
       unequipHeroGear: (slot) => mutate((s) => {
-        if (!s.hero) return;
-        const prev = s.hero.equipment[slot];
+        const h = activeHero(s);
+        if (!h) return;
+        const prev = h.equipment[slot];
         if (!prev) return;
-        s.hero.gearInventory[prev] = (s.hero.gearInventory[prev] ?? 0) + 1;
-        s.hero.equipment[slot] = null;
+        s.heroSystem.gearInventory[prev] = (s.heroSystem.gearInventory[prev] ?? 0) + 1;
+        h.equipment[slot] = null;
       }),
 
-      // Отправить героя в поход (тратит энергию, открыт при Замке ур. 7).
+      // Отправить активного героя в поход (тратит его энергию, открыт при Замке ур. 7).
       startExpedition: (expId) => mutate((s) => {
-        if (!s.hero || s.hero.expedition) return;
+        const h = activeHero(s);
+        if (!h || h.expedition) return;
         if ((s.buildings.castle ?? 1) < EXPEDITION_CASTLE_REQ) return;
         const def = expeditionDef(expId);
         if (!def) return;
-        if (heroLevelInfo(s.hero.exp).level < def.minLevel) return;
+        if (heroLevelInfo(h.exp).level < def.minLevel) return;
         const now = Date.now();
         settleHeroEnergy(s, now);
-        if (s.hero.energy < def.energyCost) return;
-        s.hero.energy -= def.energyCost;
-        s.hero.expedition = { id: expId, startedAt: now, endsAt: now + def.durationH * 3600_000 };
+        if (h.energy < def.energyCost) return;
+        h.energy -= def.energyCost;
+        h.expedition = { id: expId, startedAt: now, endsAt: now + def.durationH * 3600_000 };
         pushLog(s, def.icon, `Герой отправлен в поход: «${def.name}» (${def.durationH} ч).`, 'info');
       }),
 
@@ -1153,12 +1204,13 @@ export const useGame = create<Store>((set, get) => {
         } else if (def.kind === 'silverbag') {
           s.resources.silver += 3000;
         } else if (def.kind === 'heroExp') {
-          if (!s.hero) return;                 // нет героя — предмет не тратим
+          if (!activeHero(s)) return;          // нет активного героя — предмет не тратим
           addHeroExp(s, 500);
         } else if (def.kind === 'heroEnergy') {
-          if (!s.hero) return;
+          const h = activeHero(s);
+          if (!h) return;
           settleHeroEnergy(s, now);
-          s.hero.energy = Math.min(heroEnergyMax(s), s.hero.energy + 50);
+          h.energy = Math.min(heroEnergyMax(s), h.energy + 50);
         } else if (def.kind === 'heroToken') {
           return;                              // применяется в окне «Герой», не через «Применить»
         }

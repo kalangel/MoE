@@ -21,7 +21,6 @@ import QuestsView from './views/QuestsView';
 import Page from './components/Page';
 import ParagonPage from './components/windows/ParagonPage';
 import HeroPage from './components/windows/HeroPage';
-import HeroSelectModal from './components/HeroSelectModal';
 import ProfilePage from './components/windows/ProfilePage';
 import {
   AlliancePage, BookmarksWindow, FindWindow, ItemsPage, LeaderboardPage,
@@ -90,7 +89,6 @@ export default function App() {
       <BottomNav />
       <AnimatePresence>{ui.mapWindow && <MapWindowRouter key={ui.mapWindow} />}</AnimatePresence>
       <BattleReportModal />
-      <HeroSelectModal />
       <Toasts />
       <DevConsole />
     </div>

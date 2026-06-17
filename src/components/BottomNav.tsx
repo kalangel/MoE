@@ -1,7 +1,7 @@
 import { useGame } from '../game/store';
 import { DAILY_QUESTS } from '../game/config';
 import { PARAGON_CASTLE_REQ, availablePoints } from '../game/paragon';
-import { heroAvailablePoints } from '../game/hero';
+import { activeHero, heroAvailablePoints } from '../game/hero';
 import { useUI } from '../ui/uiStore';
 import Medallion from './Medallion';
 
@@ -14,8 +14,8 @@ export default function BottomNav() {
   const lotteryReady = s.lotteryDate !== todayStr();
   const paragonLocked = (s.buildings.castle ?? 1) < PARAGON_CASTLE_REQ;
   const pts = availablePoints(s);
-  const heroPts = s.hero ? heroAvailablePoints(s.hero) : 0;
-  const heroBadge = !s.hero ? (s.heroOffer ? 1 : 0) : heroPts;
+  // Бейдж: «1» зовёт сделать первый выбор; затем показывает нераспределённые очки талантов.
+  const heroBadge = !s.heroSystem.selected ? 1 : heroAvailablePoints(activeHero(s));
   const p = ui.page;
   const onCity = ui.screen === 'kingdom' && !p;
 

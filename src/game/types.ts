@@ -225,16 +225,27 @@ export interface HeroExpedition {
   endsAt: number;
 }
 
-export interface HeroState {
-  id: HeroId;                                 // активный архетип
+/** Прогрессия одного героя из коллекции (у каждого свой уровень/таланты/снаряжение). */
+export interface HeroInstance {
+  id: HeroId;                                 // архетип героя
   exp: number;                                // суммарный опыт (уровень выводится из него)
   level: number;                              // кэш уровня (синхронизируется с exp)
   talents: Record<string, number>;            // nodeId → ранг
   equipment: Record<EquipSlot, string | null>; // слот → gearId
-  gearInventory: Record<string, number>;       // gearId → кол-во (не надетое)
   energy: number;                             // текущая энергия героя
   energyAt: number;                           // момент последнего пересчёта энергии
   expedition: HeroExpedition | null;          // активный поход (Sovereign Journey)
+}
+
+/** Коллекция разблокированных героев (unlocked_heroes_list) по их id. */
+export type HeroCollection = Record<string, HeroInstance>;
+
+/** Состояние всей системы героев. */
+export interface HeroSystemData {
+  selected: boolean;        // стартовый выбор сделан → UI выбора заблокирован
+  activeId: HeroId | null;  // активный герой (active_hero)
+  heroes: HeroCollection;   // разблокированные герои с их прогрессией
+  gearInventory: Record<string, number>; // общий склад снаряжения (gearId → кол-во)
 }
 
 export interface GameState {
@@ -276,8 +287,7 @@ export interface GameState {
     scoutsSent: number; lootedResources: number; raidsSuffered: number;
   };
   paragon: { xp: number; nodes: Record<string, number>; abilities: Record<string, number> };
-  hero: HeroState | null;   // активный герой (null до выбора)
-  heroOffer: boolean;       // показать оверлей выбора героя (после первой Фермы)
+  heroSystem: HeroSystemData;  // система героев (выбор, активный, коллекция)
   inventory: Record<string, number>;
   lotteryDate: string;   // YYYY-MM-DD последнего розыгрыша
   mailSeen: number;      // timestamp последнего просмотра почты

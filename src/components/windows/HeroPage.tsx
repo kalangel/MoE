@@ -2,10 +2,10 @@ import { useState } from 'react';
 import { useGame } from '../../game/store';
 import { fmt, fmtDuration } from '../../game/balance';
 import {
-  EQUIP_SLOTS, EXPEDITIONS, EXPEDITION_CASTLE_REQ, HERO_BRANCH_META, HERO_LIST, HEROES,
-  RARITY_META, expeditionDef, gearDef, heroAttributes, heroAvailablePoints, heroBranchNodes,
-  heroBuffs, heroCurrentEnergy, heroEnergyMax, heroLevelInfo, heroNodeCost, heroNodeUnlocked,
-  type HeroTalentBranch,
+  EQUIP_SLOTS, EXPEDITIONS, EXPEDITION_CASTLE_REQ, HERO_BRANCH_META, HERO_LIST, HERO_RESET_COST_GOLD,
+  HEROES, RARITY_META, activeHero, expeditionDef, gearDef, heroAttributes, heroAvailablePoints,
+  heroBranchNodes, heroBuffs, heroCurrentEnergy, heroEnergyMax, heroLevelInfo, heroNodeCost,
+  heroNodeUnlocked, unlockedHeroes, type HeroTalentBranch,
 } from '../../game/hero';
 import type { EquipSlot, HeroBuffKey, HeroId } from '../../game/types';
 import Page, { SectionTitle } from '../Page';
@@ -27,16 +27,15 @@ const BUFF_LABEL: Record<HeroBuffKey, string> = {
 
 export default function HeroPage() {
   const s = useGame();
-  const hero = s.hero;
   const [tab, setTab] = useState<Tab>('overview');
+  const selected = s.heroSystem.selected;
+  const hero = activeHero(s);
 
-  if (!hero) {
+  // Селекшн-эвент: при первом открытии меню героя выбор ещё не сделан.
+  if (!selected || !hero) {
     return (
-      <Page icon="🦸" title="Герой">
-        <div className="pg-locked-msg">
-          ⭐<br />Герой ещё не избран.<br />
-          <span style={{ fontSize: 13, color: '#b39b6a' }}>Построй первую Ферму — и ко двору прибудут герои.</span>
-        </div>
+      <Page icon="🦸" title="Выбор героя">
+        <HeroSelection />
       </Page>
     );
   }
@@ -74,11 +73,46 @@ export default function HeroPage() {
   );
 }
 
+// ---------------- Селекшн-эвент (4 стартовых героя) ----------------
+function HeroSelection() {
+  const a = useGame((st) => st.actions);
+  const [pick, setPick] = useState<HeroId | null>(null);
+  return (
+    <>
+      <p className="muted" style={{ textAlign: 'center', marginBottom: 12 }}>
+        Избери своего первого героя. Выбор фиксируется — сменить активного позже можно лишь
+        за 🔁 «Печать смены героя», собрав других героев в событиях.
+      </p>
+      <div className="hero-pick-grid">
+        {HERO_LIST.map((h) => (
+          <button
+            key={h.id}
+            className={`hero-card ${pick === h.id ? 'sel' : ''}`}
+            onClick={() => setPick(h.id)}
+            style={{ ['--hc' as string]: h.color }}
+          >
+            <div className="hero-card-portrait">{h.icon}</div>
+            <div className="hero-card-name">{h.name}</div>
+            <div className="hero-card-title">{h.title}</div>
+            <ul className="hero-card-buffs">
+              {h.signature.map((sig) => <li key={sig}>✦ {sig}</li>)}
+            </ul>
+            <div className="hero-card-blurb">{h.blurb}</div>
+          </button>
+        ))}
+      </div>
+      <button className="btn gold" style={{ width: '100%', marginTop: 6 }} disabled={!pick} onClick={() => pick && a.chooseInitialHero(pick)}>
+        {pick ? `Избрать: ${HERO_LIST.find((h) => h.id === pick)!.name}` : 'Выбери героя'}
+      </button>
+    </>
+  );
+}
+
 // ---------------- Обзор ----------------
 function Overview() {
   const s = useGame();
   const a = useGame((st) => st.actions);
-  const hero = s.hero!;
+  const hero = activeHero(s)!;
   const now = Date.now();
   const attrs = heroAttributes(hero);
   const buffs = heroBuffs(s);
@@ -86,6 +120,7 @@ function Overview() {
   const energy = heroCurrentEnergy(s, now);
   const token = s.inventory.heroSwapToken ?? 0;
   const activeBuffs = (Object.keys(buffs) as HeroBuffKey[]).filter((k) => buffs[k] > 0);
+  const others = unlockedHeroes(s).filter((h) => h.id !== hero.id);
 
   return (
     <>
@@ -119,25 +154,31 @@ function Overview() {
         ))}
       </div>
 
-      <SectionTitle>Сменить героя</SectionTitle>
+      <SectionTitle>Коллекция героев</SectionTitle>
       <p className="muted" style={{ marginBottom: 8 }}>
-        Требуется 🔁 «Печать смены героя» (есть: {token}). Уровень, таланты и снаряжение сохраняются.
+        Активным может быть один герой. Смена — за 🔁 «Печать смены героя» (есть: {token}).
       </p>
+      {others.length === 0 && (
+        <div className="muted">У тебя пока только один герой. Новых можно завербовать в Походах и событиях.</div>
+      )}
       <div className="hero-swap-row">
-        {HERO_LIST.filter((h) => h.id !== hero.id).map((h) => (
-          <button
-            key={h.id}
-            className="hero-swap-card"
-            style={{ ['--hc' as string]: h.color }}
-            disabled={token <= 0}
-            onClick={() => a.swapHero(h.id as HeroId)}
-            title={h.signature.join(' · ')}
-          >
-            <span className="hero-swap-ic">{h.icon}</span>
-            <span className="hero-swap-name">{h.name}</span>
-            <span className="hero-swap-sig">{h.signature[0]}</span>
-          </button>
-        ))}
+        {others.map((h) => {
+          const arch = HEROES[h.id];
+          return (
+            <button
+              key={h.id}
+              className="hero-swap-card"
+              style={{ ['--hc' as string]: arch.color }}
+              disabled={token <= 0}
+              onClick={() => a.swapHero(h.id as HeroId)}
+              title={arch.signature.join(' · ')}
+            >
+              <span className="hero-swap-ic">{arch.icon}</span>
+              <span className="hero-swap-name">{arch.name} · ур.{heroLevelInfo(h.exp).level}</span>
+              <span className="hero-swap-sig">{token > 0 ? '🔁 Сделать активным' : 'Нужна печать'}</span>
+            </button>
+          );
+        })}
       </div>
     </>
   );
@@ -157,16 +198,17 @@ function Attr({ icon, name, value, hint }: { icon: string; name: string; value: 
 function Talents() {
   const s = useGame();
   const a = useGame((st) => st.actions);
-  const hero = s.hero!;
+  const hero = activeHero(s)!;
   const [branch, setBranch] = useState<HeroTalentBranch>('warfare');
   const points = heroAvailablePoints(hero);
   const nodes = heroBranchNodes(branch);
+  const canReset = Object.keys(hero.talents).length > 0 && s.resources.gold >= HERO_RESET_COST_GOLD;
 
   return (
     <>
       <div className="pg-bonus-head">
         <span>🌟 Очки талантов: <b>{points}</b></span>
-        <button className="btn ghost sm" onClick={() => a.resetHeroTalents()}>🔄 Сброс</button>
+        <button className="btn ghost sm" disabled={!canReset} onClick={() => a.resetHeroTalents()}>🔄 Сброс ({HERO_RESET_COST_GOLD}👑)</button>
       </div>
       <p className="muted" style={{ marginBottom: 6 }}>
         1 очко за уровень. Очков мало — все ветки не выкачать, специализируйся.
@@ -210,10 +252,11 @@ function Talents() {
 function Forge() {
   const s = useGame();
   const a = useGame((st) => st.actions);
-  const hero = s.hero!;
+  const hero = activeHero(s)!;
+  const store = s.heroSystem.gearInventory;
   const [sel, setSel] = useState<EquipSlot | null>(null);
 
-  const owned = Object.entries(hero.gearInventory).filter(([, n]) => n > 0);
+  const owned = Object.entries(store).filter(([, n]) => n > 0);
   const selSlotDef = sel ? EQUIP_SLOTS.find((x) => x.slot === sel) : null;
   const compatible = selSlotDef
     ? owned.filter(([gid]) => gearDef(gid)?.slot === selSlotDef.accepts)
@@ -248,7 +291,7 @@ function Forge() {
               ✊ Снять текущий
             </button>
           )}
-          {compatible.length === 0 && <div className="muted">Нет подходящих предметов в инвентаре героя. Добывай их в Походах.</div>}
+          {compatible.length === 0 && <div className="muted">Нет подходящих предметов на складе. Добывай их в Походах.</div>}
           {compatible.map(([gid, n]) => {
             const def = gearDef(gid)!;
             return (
@@ -276,7 +319,7 @@ function gearMods(mods: Partial<Record<HeroBuffKey, number>>): string {
 function Expeditions() {
   const s = useGame();
   const a = useGame((st) => st.actions);
-  const hero = s.hero!;
+  const hero = activeHero(s)!;
   const now = Date.now();
   const castle = s.buildings.castle ?? 1;
   const level = heroLevelInfo(hero.exp).level;
@@ -319,7 +362,7 @@ function Expeditions() {
               <div className="wr-title">{e.name} <span className="muted">· ур. {e.minLevel}+ · {e.durationH}ч · ⚡{e.energyCost}</span></div>
               <div className="wr-sub">{e.desc}</div>
               <div className="wr-sub" style={{ color: 'var(--gold-lt)' }}>
-                Награда: +{e.rewards.exp} опыта{e.rewards.gold ? ` · 👑${e.rewards.gold}` : ''}{e.rewards.iron ? ` · ⛏${fmt(e.rewards.iron)}` : ''}{e.rewards.gearPool ? ' · ⚔ шанс снаряжения' : ''}
+                Награда: +{e.rewards.exp} опыта{e.rewards.gold ? ` · 👑${e.rewards.gold}` : ''}{e.rewards.iron ? ` · ⛏${fmt(e.rewards.iron)}` : ''}{e.rewards.gearPool ? ' · ⚔ шанс снаряжения' : ''}{e.rewards.recruit ? ' · 🦸 шанс героя' : ''}
               </div>
             </div>
             <button className="btn btn-blue sm" disabled={disabled} onClick={() => a.startExpedition(e.id)}>

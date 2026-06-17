@@ -1,5 +1,5 @@
 import type {
-  EquipSlot, GameState, GearSlot, HeroBuffKey, HeroId, HeroState, UnitClass,
+  EquipSlot, GameState, GearSlot, HeroBuffKey, HeroId, HeroInstance, HeroSystemData, UnitClass,
 } from './types';
 
 // ============================================================
@@ -36,6 +36,7 @@ export const HERO_POINTS_PER_LEVEL = 1;        // 1 очко таланта за
 export const HERO_ENERGY_BASE = 100;           // базовый пул энергии
 export const HERO_ENERGY_REGEN_PER_H = 10;     // восстановление энергии в час
 export const EXPEDITION_CASTLE_REQ = 7;        // Походы открываются на Замке ур. 7
+export const HERO_RESET_COST_GOLD = 100;       // стоимость сброса талантов (золото)
 
 // ============================================================
 //  1. АРХЕТИПЫ ГЕРОЕВ (стартовый выбор из 4)
@@ -231,6 +232,8 @@ export interface ExpeditionReward {
   iron?: number; wood?: number; silver?: number; food?: number;
   gearPool?: string[];   // возможный дроп экипировки (один из)
   gearChance?: number;   // шанс дропа 0..1
+  recruit?: boolean;     // может разблокировать нового героя в коллекцию
+  recruitChance?: number;
 }
 export interface ExpeditionDef {
   id: string;
@@ -262,7 +265,7 @@ export const EXPEDITIONS: ExpeditionDef[] = [
   {
     id: 'legend', name: 'Легендарная одиссея', icon: '🌋', desc: 'Опаснейший путь — шанс на легендарный трофей.',
     durationH: 16, energyCost: 100, minLevel: 20,
-    rewards: { exp: 4000, gold: 150, iron: 12000, wood: 12000, silver: 9000, food: 9000, gearPool: ['bannerOfCommand'], gearChance: 0.4 },
+    rewards: { exp: 4000, gold: 150, iron: 12000, wood: 12000, silver: 9000, food: 9000, gearPool: ['bannerOfCommand'], gearChance: 0.4, recruit: true, recruitChance: 0.5 },
   },
 ];
 
@@ -290,17 +293,37 @@ export function heroLevelInfo(exp: number): { level: number; into: number; need:
 export function heroTotalPoints(level: number): number {
   return level * HERO_POINTS_PER_LEVEL;
 }
-export function heroAvailablePoints(hero: HeroState | null): number {
+export function heroAvailablePoints(hero: HeroInstance | null): number {
   if (!hero) return 0;
   const level = heroLevelInfo(hero.exp).level;
   return heroTotalPoints(level) - heroSpentPoints(hero.talents);
 }
 
 // ============================================================
+//  Доступ к активному герою / коллекции
+// ============================================================
+export function emptyEquipment(): Record<EquipSlot, string | null> {
+  return { weapon: null, armor: null, helmet: null, boots: null, acc1: null, acc2: null };
+}
+export function freshHeroSystem(): HeroSystemData {
+  return { selected: false, activeId: null, heroes: {}, gearInventory: {} };
+}
+/** Активный герой (active_hero) или null, если ещё не выбран. */
+export function activeHero(s: GameState): HeroInstance | null {
+  const hs = s.heroSystem;
+  if (!hs || !hs.activeId) return null;
+  return hs.heroes[hs.activeId] ?? null;
+}
+/** Список разблокированных героев (unlocked_heroes_list). */
+export function unlockedHeroes(s: GameState): HeroInstance[] {
+  return s.heroSystem ? Object.values(s.heroSystem.heroes) : [];
+}
+
+// ============================================================
 //  6. АТРИБУТЫ
 // ============================================================
 export interface HeroAttributes { health: number; attack: number; magic: number; command: number; }
-export function heroAttributes(hero: HeroState | null): HeroAttributes {
+export function heroAttributes(hero: HeroInstance | null): HeroAttributes {
   if (!hero) return { health: 0, attack: 0, magic: 0, command: 0 };
   const arch = HEROES[hero.id];
   const lv = heroLevelInfo(hero.exp).level;
@@ -312,42 +335,68 @@ export function heroAttributes(hero: HeroState | null): HeroAttributes {
     command: Math.round(arch.base.command + arch.growth.command * step),
   };
 }
-/** Бонус к макс. размеру отряда от атрибута «Командование». */
+/** Бонус к макс. размеру отряда от атрибута «Командование» активного героя. */
 export function heroCommand(s: GameState): number {
-  return s.hero ? heroAttributes(s.hero).command : 0;
+  return heroAttributes(activeHero(s)).command;
 }
 
 // ============================================================
-//  7. BUFF MANAGER — сводит все источники в единый стат-блок героя
+//  7. BUFF MANAGER — сводит и ВАЛИДИРУЕТ все источники баффов
 // ============================================================
-export function heroBuffs(s: GameState): HeroBuffs {
+/** Потолки баффов (защита от переполнения через таланты/снаряжение). */
+const BUFF_CAP_DEFAULT = 3.0; // +300%
+const BUFF_CAPS: Partial<Record<HeroBuffKey, number>> = {
+  marchSpeed: 1.5, marchCapacity: 1.5,
+  resourceProduction: 2.0, constructionSpeed: 0.9, researchSpeed: 0.9, trainingSpeed: 0.9,
+};
+
+/** Валидация: каждая доля приводится к диапазону [0, потолок ключа]. */
+export function validateBuffs(raw: HeroBuffs): HeroBuffs {
   const out = zeroBuffs();
-  const hero = s.hero;
-  if (!hero) return out;
-
-  const add = (eff?: HeroEffects, mult = 1) => {
-    if (!eff) return;
-    for (const k of Object.keys(eff) as HeroBuffKey[]) out[k] += (eff[k] ?? 0) * mult;
-  };
-
-  // 1) пассивка архетипа
-  add(HEROES[hero.id].passive);
-  // 2) таланты
-  for (const node of HERO_TALENTS) {
-    const rank = hero.talents[node.id] ?? 0;
-    if (rank > 0) add(node.effects, rank);
-  }
-  // 3) надетая экипировка
-  for (const slot of Object.keys(hero.equipment) as EquipSlot[]) {
-    const gid = hero.equipment[slot];
-    if (gid) add(gearDef(gid)?.mods);
+  for (const k of Object.keys(raw) as HeroBuffKey[]) {
+    const cap = BUFF_CAPS[k] ?? BUFF_CAP_DEFAULT;
+    out[k] = Math.max(0, Math.min(cap, raw[k]));
   }
   return out;
 }
 
+/** Сырой стат-блок конкретного героя: пассивка + таланты + экипировка (валидируется). */
+export function heroInstanceBuffs(hero: HeroInstance | null): HeroBuffs {
+  const out = zeroBuffs();
+  if (!hero) return out;
+  const add = (eff?: HeroEffects, mult = 1) => {
+    if (!eff) return;
+    for (const k of Object.keys(eff) as HeroBuffKey[]) out[k] += (eff[k] ?? 0) * mult;
+  };
+  add(HEROES[hero.id].passive);                 // 1) пассивка архетипа
+  for (const node of HERO_TALENTS) {            // 2) таланты
+    const rank = hero.talents[node.id] ?? 0;
+    if (rank > 0) add(node.effects, rank);
+  }
+  for (const slot of Object.keys(hero.equipment) as EquipSlot[]) { // 3) экипировка
+    const gid = hero.equipment[slot];
+    if (gid) add(gearDef(gid)?.mods);
+  }
+  return validateBuffs(out);
+}
+
+/** Итоговые (валидированные) баффы активного героя — потребляются balance.ts. */
+export function heroBuffs(s: GameState): HeroBuffs {
+  return heroInstanceBuffs(activeHero(s));
+}
+
 /** Объект-фасад «BuffManager» — явный технический deliverable. */
 export const BuffManager = {
+  /** Агрегировать + валидировать баффы активного героя. */
   aggregate: heroBuffs,
+  /** Агрегировать баффы конкретного героя из коллекции. */
+  forHero: heroInstanceBuffs,
+  /** Валидация произвольного набора долей. */
+  validate: validateBuffs,
+  /** Применить процентный множитель ключа к базовому значению. */
+  apply(base: number, key: HeroBuffKey, s: GameState): number {
+    return base * (1 + heroBuffs(s)[key]);
+  },
   /** Множитель атаки для конкретного рода войск. */
   classAttack(b: HeroBuffs, cls: UnitClass): number {
     return b.allTroopAttack + classKeyAttack(b, cls);
@@ -378,27 +427,32 @@ function classKeyDefense(b: HeroBuffs, cls: UnitClass): number {
 }
 
 // ============================================================
-//  8. ЭНЕРГИЯ
+//  8. ЭНЕРГИЯ (у каждого героя своя)
 // ============================================================
+export function heroEnergyMaxFor(hero: HeroInstance | null): number {
+  if (!hero) return 0;
+  return Math.round(HERO_ENERGY_BASE * (1 + heroInstanceBuffs(hero).heroEnergy));
+}
+/** Макс. энергия активного героя. */
 export function heroEnergyMax(s: GameState): number {
-  if (!s.hero) return 0;
-  return Math.round(HERO_ENERGY_BASE * (1 + heroBuffs(s).heroEnergy));
+  return heroEnergyMaxFor(activeHero(s));
 }
-/** Текущая энергия с учётом регена с момента energyAt (без мутаций). */
+/** Текущая энергия героя с учётом регена (без мутаций). */
+export function heroCurrentEnergyFor(hero: HeroInstance | null, now: number): number {
+  if (!hero) return 0;
+  const max = heroEnergyMaxFor(hero);
+  const elapsedH = Math.max(0, (now - hero.energyAt) / HOUR);
+  return Math.min(max, hero.energy + elapsedH * HERO_ENERGY_REGEN_PER_H);
+}
+/** Текущая энергия активного героя. */
 export function heroCurrentEnergy(s: GameState, now: number): number {
-  if (!s.hero) return 0;
-  const max = heroEnergyMax(s);
-  const elapsedH = Math.max(0, (now - s.hero.energyAt) / HOUR);
-  return Math.min(max, s.hero.energy + elapsedH * HERO_ENERGY_REGEN_PER_H);
+  return heroCurrentEnergyFor(activeHero(s), now);
 }
-/** Пересчитать и записать энергию героя в состоянии (мутация). */
+/** Пересчитать и записать энергию ВСЕХ героев коллекции (мутация). */
 export function settleHeroEnergy(s: GameState, now: number): void {
-  if (!s.hero) return;
-  s.hero.energy = heroCurrentEnergy(s, now);
-  s.hero.energyAt = now;
-}
-
-// ---------- Утилиты ----------
-export function heroHasFarm(zone: { type: string | null }[] | undefined): boolean {
-  return !!zone && zone.some((p) => p.type === 'farm');
+  if (!s.heroSystem) return;
+  for (const hero of Object.values(s.heroSystem.heroes)) {
+    hero.energy = heroCurrentEnergyFor(hero, now);
+    hero.energyAt = now;
+  }
 }

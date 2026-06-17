@@ -1,10 +1,10 @@
 import { BUILDINGS, FACTIONS, RESOURCE_BUILDING_IDS } from './config';
-import { HEROES, heroEnergyMax, heroLevelInfo, settleHeroEnergy } from './hero';
+import { HEROES, activeHero, heroEnergyMax, heroLevelInfo, settleHeroEnergy } from './hero';
 import { HOUR, fmt, powerBreakdown } from './balance';
 import { freshState, saveNow, useGame } from './store';
 import { useOnlineStore } from '../online/onlineStore';
 import { listPlayersFull, rpcGift, rpcSetPerm, setMyDev } from '../online/online';
-import type { BuildingId, FactionId, GameState, Resource } from './types';
+import type { BuildingId, FactionId, GameState, HeroId, Resource } from './types';
 
 export interface ConsoleLine {
   text: string;
@@ -330,30 +330,45 @@ export async function execCommand(raw: string): Promise<ConsoleLine[]> {
       if (!has(level, 'dev')) return noPerm('dev');
       const sub = largs[0];
       const s0 = useGame.getState();
+      const heroIds = Object.keys(HEROES) as HeroId[];
       if (!sub || sub === 'info') {
-        if (!s0.hero) return out(['Герой ещё не выбран.']);
-        const li = heroLevelInfo(s0.hero.exp);
+        const h0 = activeHero(s0);
+        const unlocked = Object.keys(s0.heroSystem.heroes);
+        if (!h0) return out([`Активный герой не выбран. Разблокировано: ${unlocked.length ? unlocked.join(', ') : '—'}`]);
+        const li = heroLevelInfo(h0.exp);
         return out([
-          `Герой: ${HEROES[s0.hero.id].name} (${HEROES[s0.hero.id].title})`,
-          `Уровень ${li.level} · опыт ${li.into}/${li.need} · энергия ${Math.floor(s0.hero.energy)}/${heroEnergyMax(s0)}`,
+          `Активный: ${HEROES[h0.id].name} (${HEROES[h0.id].title})`,
+          `Уровень ${li.level} · опыт ${li.into}/${li.need} · энергия ${Math.floor(h0.energy)}/${heroEnergyMax(s0)}`,
+          `Коллекция: ${unlocked.join(', ') || '—'}`,
         ]);
       }
-      if (!s0.hero) return err('Сначала выбери героя (построй Ферму).');
       const n = parseCount(args[1]);
-      if (sub === 'exp') {
-        if (n === null) return err('Использование: hero exp <число>');
-        mutate((s) => { if (s.hero) { s.hero.exp = Math.max(0, s.hero.exp + n); s.hero.level = heroLevelInfo(s.hero.exp).level; } });
-        return out([`Опыт героя: ${n >= 0 ? '+' : ''}${n} → уровень ${heroLevelInfo(useGame.getState().hero!.exp).level}`]);
+      if (sub === 'unlock') {
+        const id = largs[1] as HeroId;
+        if (!HEROES[id]) return err(`Герой: ${heroIds.join(', ')}`);
+        useGame.getState().actions.unlockHero(id);
+        return out([`Разблокирован герой: ${HEROES[id].name}`]);
       }
-      if (sub === 'energy') {
-        mutate((s) => { if (s.hero) { settleHeroEnergy(s, Date.now()); s.hero.energy = largs[1] === 'max' ? heroEnergyMax(s) : Math.max(0, s.hero.energy + (n ?? 0)); } });
-        return out([`Энергия героя → ${Math.floor(useGame.getState().hero!.energy)}`]);
+      if (sub === 'unlockall') {
+        mutate((s) => { for (const id of heroIds) if (!s.heroSystem.heroes[id]) s.heroSystem.heroes[id] = { id, exp: 0, level: 1, talents: {}, equipment: { weapon: null, armor: null, helmet: null, boots: null, acc1: null, acc2: null }, energy: 100, energyAt: Date.now(), expedition: null }; });
+        return out(['Все герои разблокированы.']);
       }
       if (sub === 'token') {
         mutate((s) => { s.inventory.heroSwapToken = (s.inventory.heroSwapToken ?? 0) + (n ?? 1); });
         return out([`Печати смены героя: +${n ?? 1}`]);
       }
-      return err('Использование: hero info | hero exp <n> | hero energy <n>|max | hero token <n>');
+      const h = activeHero(s0);
+      if (!h) return err('Нет активного героя. Открой меню «Герой» и выбери стартового.');
+      if (sub === 'exp') {
+        if (n === null) return err('Использование: hero exp <число>');
+        mutate((s) => { const hh = activeHero(s); if (hh) { hh.exp = Math.max(0, hh.exp + n); hh.level = heroLevelInfo(hh.exp).level; } });
+        return out([`Опыт героя: ${n >= 0 ? '+' : ''}${n} → уровень ${heroLevelInfo(activeHero(useGame.getState())!.exp).level}`]);
+      }
+      if (sub === 'energy') {
+        mutate((s) => { const hh = activeHero(s); if (hh) { settleHeroEnergy(s, Date.now()); hh.energy = largs[1] === 'max' ? heroEnergyMax(s) : Math.max(0, hh.energy + (n ?? 0)); } });
+        return out([`Энергия героя → ${Math.floor(activeHero(useGame.getState())!.energy)}`]);
+      }
+      return err('Использование: hero info | exp <n> | energy <n>|max | token <n> | unlock <id> | unlockall');
     }
 
     case 'reset': {
