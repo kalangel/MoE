@@ -332,6 +332,15 @@ export const DAILY_QUESTS: QuestDef[] = [
 
 export const START_RESOURCES = { iron: 600, wood: 600, silver: 400, food: 800, gold: 100 };
 
+// ---- Комплекты сортировки армии (экран «В бой») ----
+export interface BattlePresetDef { id: string; name: string; cost: number; manual: boolean; }
+export const BATTLE_PRESETS: BattlePresetDef[] = [
+  { id: 'default', name: 'По умолчанию', cost: 0, manual: false },
+  { id: 'kit1', name: 'Комплект I', cost: 5000, manual: true },
+  { id: 'kit2', name: 'Комплект II', cost: 25000, manual: true },
+  { id: 'fast', name: 'Быстрая атака', cost: 75000, manual: true },
+];
+
 // ---- Инвентарь (Предметы) ----
 export interface ItemDef {
   id: string;

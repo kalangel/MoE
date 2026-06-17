@@ -111,7 +111,28 @@ export const FORMATIONS: Formation[] = [
   { id: 'defense', name: 'Оборона', icon: '🛡️', unlockCastle: 4, atkMult: 0.9, lossReduction: 0.22, classAtkMult: { spear: 1.1 }, desc: '−22% потерь, +10% копейщикам' },
   { id: 'wedge', name: 'Клин', icon: '🔻', unlockCastle: 4, atkMult: 1.0, lossReduction: 0, classAtkMult: { sword: 1.25, cavalry: 1.2 }, desc: '+25% мечникам, +20% кавалерии' },
   { id: 'skirmish', name: 'Рассеянная', icon: '🎯', unlockCastle: 4, atkMult: 1.0, lossReduction: 0.12, classAtkMult: { ranged: 1.25, siege: 1.25 }, desc: '+25% стрелкам и осадным, −12% потерь' },
+  { id: 'fourfour', name: '4 на 4', icon: '🧱', unlockCastle: 1, atkMult: 1.0, lossReduction: 0.08, classAtkMult: {}, desc: 'Две линии: 4 сверху, 4 снизу' },
 ];
+
+// План «4 на 4» — 8 слотов (две линии по 4)
+export const SLOTS_4x4: FormationSlot[] = [
+  { id: 'f1', label: 'Фронт 1', row: 0, col: 0 },
+  { id: 'f2', label: 'Фронт 2', row: 0, col: 1 },
+  { id: 'f3', label: 'Фронт 3', row: 0, col: 2 },
+  { id: 'f4', label: 'Фронт 4', row: 0, col: 3 },
+  { id: 'r1', label: 'Тыл 1', row: 1, col: 0 },
+  { id: 'r2', label: 'Тыл 2', row: 1, col: 1 },
+  { id: 'r3', label: 'Тыл 3', row: 1, col: 2 },
+  { id: 'r4', label: 'Тыл 4', row: 1, col: 3 },
+];
+/** Слоты выбранного плана атаки. */
+export function planSlots(formationId: string): FormationSlot[] {
+  return formationId === 'fourfour' ? SLOTS_4x4 : SLOTS;
+}
+/** Число колонок поля построения для плана. */
+export function planCols(formationId: string): number {
+  return formationId === 'fourfour' ? 4 : 3;
+}
 export function formationById(id: string): Formation {
   return FORMATIONS.find((f) => f.id === id) ?? FORMATIONS[0];
 }

@@ -100,13 +100,15 @@ function buildNodes(): AcademyNode[] {
         const meta = ACADEMY_KEY_META[key];
         // прибавка растёт с эрой (I=1%, V=5% за ранг) и слегка по глубине ветви
         const perLevel = Math.round((0.01 * era.n + 0.002 * (tier - 1)) * 1000) / 1000;
+        // 10-й узел ветви «Держава» — особый: «Армия следующей эры»
+        const special = branch === 'state' && idx === 9;
         out.push({
           id: `a${era.n}_${branch}_${idx}`,
           era: era.n,
           branch,
           idx,
-          name: `${meta.label} ${ROMAN[tier]}`,
-          icon: meta.icon,
+          name: special ? 'Армия следующей эры' : `${meta.label} ${ROMAN[tier]}`,
+          icon: special ? '🚩' : meta.icon,
           key,
           perLevel,
           cost: era.n, // очков за ранг
@@ -128,6 +130,37 @@ export function academyBranchNodes(era: number, branch: AcademyBranch): AcademyN
 }
 export function academyEraUnlocked(era: number, castleLevel: number): boolean {
   return castleLevel >= academyEra(era).unlockCastle;
+}
+
+// ---- Текущая эра игрока и скорость марша по эрам ----
+/** Высшая открытая (по Замку) эра. */
+export function currentEra(s: GameState): number {
+  const castle = s.buildings.castle ?? 1;
+  let era = 1;
+  for (const e of ACADEMY_ERAS) if (academyEraUnlocked(e.n, castle)) era = e.n;
+  return era;
+}
+/** Множитель скорости марша по эре: I=×5, II=×4, III=×3, IV=×2, V=×1. */
+export function eraMarchFactor(s: GameState): number {
+  return [5, 4, 3, 2, 1][currentEra(s) - 1] ?? 1;
+}
+
+// ---- Прогресс эры и блок следующей эры (нужно 75% текущей) ----
+export const ERA_MAX_RANKS = 3 * NODES_PER_BRANCH * ACADEMY_NODE_MAX; // 3 ветви × 25 × 3
+export const ERA_UNLOCK_FRACTION = 0.75;
+export function eraRanks(levels: Record<string, number>, era: number): number {
+  let total = 0;
+  for (const n of ACADEMY_NODES) if (n.era === era) total += levels[n.id] ?? 0;
+  return total;
+}
+export function eraProgress(s: GameState, era: number): number {
+  return eraRanks(s.academy ?? {}, era) / ERA_MAX_RANKS;
+}
+/** Можно ли качать узлы данной эры: открыта по Замку И предыдущая эра ≥75%. */
+export function eraResearchable(s: GameState, era: number): boolean {
+  if (!academyEraUnlocked(era, s.buildings.castle ?? 1)) return false;
+  if (era <= 1) return true;
+  return eraProgress(s, era - 1) >= ERA_UNLOCK_FRACTION;
 }
 /** Узел открыт, если предыдущий в ветви прокачан хотя бы на 1 ранг. */
 export function academyNodeUnlocked(node: AcademyNode, levels: Record<string, number>): boolean {

@@ -192,6 +192,12 @@ export interface DailyQuestState {
 
 export type View = 'kingdom' | 'map' | 'army' | 'research' | 'quests';
 
+/** Сохранённая расстановка армии для комплекта сортировки. */
+export interface BattleLayout {
+  formationId: string;
+  slots: Record<string, { unitId: string; count: number }>;
+}
+
 // ============================================================
 //  ГЕРОЙ (Champion System)
 // ============================================================
@@ -276,6 +282,9 @@ export interface GameState {
   research: Record<ResearchId, number>;
   academy: Record<string, number>;   // Академия: nodeId → ранг (древо эпох)
   barbXp: number;                    // Опыт Варваров (открывает уровни лагерей)
+  nextCampRefreshAt: number;         // когда обновить лагеря варваров на карте
+  battlePresets: string[];           // купленные комплекты сортировки армии
+  battleLayouts: Record<string, BattleLayout>; // сохранённые расстановки по комплектам
   army: Record<string, number>;
   buildQueue: BuildTask[];
   researchQueue: ResearchTask[];

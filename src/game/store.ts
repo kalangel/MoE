@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import {
-  ALLIES, BLESSINGS, BLESSING_DURATION_H, BOT_ACT_MAX_M, BOT_ACT_MIN_M, BOT_SEEDS,
+  ALLIES, BATTLE_PRESETS, BLESSINGS, BLESSING_DURATION_H, BOT_ACT_MAX_M, BOT_ACT_MIN_M, BOT_SEEDS,
   BUILDINGS, CAMP_SEEDS, DAILY_QUESTS, EMBASSY_COOLDOWN_H, EMBASSY_HELP_MIN_PER_LVL,
   FACTIONS, FACTION_CHANGE_COST, FREE_SHIELD_COOLDOWN_H, ITEM_DEFS, LOTTERY_PRIZES,
   PLAYER_POS, PLAYER_RAID_SAFE_POWER, RECON_COST_SILVER, RECON_MAX_S, RECON_MIN_S, RESEARCH,
@@ -26,15 +26,15 @@ import {
   settleHeroEnergy, slotAccepts,
 } from './hero';
 import {
-  barbXpForCamp, generateGear, randomGearSlot, rollCampLoot, unlockedBarbLevel,
+  MAX_BARB_LEVEL, barbXpForCamp, generateGear, randomGearSlot, rollCampLoot, unlockedBarbLevel,
 } from './barbarians';
 import {
-  ACADEMY_NODE_MAX, academyAvailablePoints, academyBuffs, academyEraUnlocked,
-  academyNode, academyNodeUnlocked,
+  ACADEMY_NODE_MAX, academyAvailablePoints, academyBuffs, academyNode,
+  academyNodeUnlocked, eraMarchFactor, eraResearchable,
 } from './academy';
 import type {
-  BattleReport, Bot, BuildingId, Camp, EnemySnapshot, EquipSlot, FactionId, GameState, HeroId,
-  HeroInstance, HeroSystemData, LogEntry, MarchTask, ResearchId, Resource, ResourceBuildingId,
+  BattleLayout, BattleReport, Bot, BuildingId, Camp, EnemySnapshot, EquipSlot, FactionId, GameState,
+  HeroId, HeroInstance, HeroSystemData, LogEntry, MarchTask, ResearchId, Resource, ResourceBuildingId,
   ResourcePlot, Resources, ScoutKind, TargetKind,
 } from './types';
 
@@ -90,6 +90,8 @@ interface Actions {
   useItem: (itemId: string) => void;
   claimLottery: () => void;
   markMailSeen: () => void;
+  buyBattlePreset: (id: string) => void;
+  saveBattleLayout: (id: string, layout: BattleLayout) => void;
   // онлайн
   sendPlayerAttack: (enemy: EnemySnapshot, units: Record<string, number>, formationId: string) => void;
   applyEnemyAttack: (loot: Partial<Resources>, troopLoss: number, report: string) => void;
@@ -117,6 +119,30 @@ function makeBots(now: number): Bot[] {
 
 function makeCamps(): Camp[] {
   return CAMP_SEEDS.map((seed) => ({ ...seed, damagedAt: 0, damageFraction: 0 }));
+}
+
+/** Сгенерировать свежий набор лагерей варваров со спредом уровней (для обновления каждые 10 мин). */
+function refreshCamps(maxLevel: number): Camp[] {
+  const cap = Math.max(1, Math.min(MAX_BARB_LEVEL, maxLevel));
+  const n = 6;
+  const camps: Camp[] = [];
+  for (let i = 0; i < n; i++) {
+    let level: number;
+    if (i === 0) level = 1;
+    else if (i === n - 1) level = cap;
+    else level = 1 + Math.floor(Math.random() * cap);
+    level = Math.max(1, Math.min(MAX_BARB_LEVEL, level));
+    camps.push({
+      id: `camp_${uid()}`,
+      level,
+      basePower: Math.round(150 * Math.pow(level, 1.7)),
+      x: 300 + Math.round(Math.random() * 1600),
+      y: 300 + Math.round(Math.random() * 900),
+      damagedAt: 0,
+      damageFraction: 0,
+    });
+  }
+  return camps;
 }
 
 export function campName(level: number): string {
@@ -196,6 +222,9 @@ export function freshState(now: number): GameState {
     research: { economy: 0, construction: 0, attack: 0, defense: 0 },
     academy: {},
     barbXp: 0,
+    nextCampRefreshAt: now + 10 * 60_000,
+    battlePresets: ['default'],
+    battleLayouts: {},
     army: {},
     buildQueue: [],
     researchQueue: [],
@@ -266,6 +295,9 @@ function loadState(): GameState {
         heroSystem: migrateHeroSystem(parsed as Record<string, unknown>, now),
         academy: parsed.academy ?? {},
         barbXp: parsed.barbXp ?? 0,
+        nextCampRefreshAt: parsed.nextCampRefreshAt ?? (now + 10 * 60_000),
+        battlePresets: parsed.battlePresets ?? ['default'],
+        battleLayouts: parsed.battleLayouts ?? {},
       } as GameState;
     }
   } catch (e) {
@@ -817,6 +849,13 @@ function runTick(s: GameState, now: number): BattleReport | null {
   }
   // Истёкшее благословение
   if (s.blessing && s.blessing.endsAt <= now) s.blessing = null;
+  // Обновление лагерей варваров каждые 10 минут (спред уровней под текущий прогресс)
+  if (!s.nextCampRefreshAt || now >= s.nextCampRefreshAt) {
+    // лагеря с летящими к ним войсками не удаляем (иначе потеряются армии)
+    const pinned = s.camps.filter((c) => s.marches.some((m) => m.targetId === c.id));
+    s.camps = [...pinned, ...refreshCamps(unlockedBarbLevel(s.barbXp) + 1)].slice(0, 8);
+    s.nextCampRefreshAt = now + 10 * 60_000;
+  }
   // Реген энергии героя
   settleHeroEnergy(s, now);
   s.lastTick = now;
@@ -1037,7 +1076,7 @@ export const useGame = create<Store>((set, get) => {
         const node = academyNode(nodeId);
         if (!node) return;
         if ((s.buildings.academy ?? 0) < 1) return;                   // нужна построенная Академия
-        if (!academyEraUnlocked(node.era, s.buildings.castle ?? 1)) return; // эра по уровню Замка
+        if (!eraResearchable(s, node.era)) return;                    // эра по Замку + 75% предыдущей
         const cur = s.academy[nodeId] ?? 0;
         if (cur >= ACADEMY_NODE_MAX) return;
         if (!academyNodeUnlocked(node, s.academy)) return;              // нужен предыдущий узел
@@ -1142,7 +1181,7 @@ export const useGame = create<Store>((set, get) => {
           s.shieldUntil = 0; // атака снимает собственный щит — сразу можно надеть новый
           pushLog(s, '⚠️', 'Твой щит снят: ты начал атаку.', 'info');
         }
-        const dur = marchTimeMs(s.playerPos, pos, 1 + heroBuffs(s).marchSpeed + academyBuffs(s).marchSpeed);
+        const dur = marchTimeMs(s.playerPos, pos, (1 + heroBuffs(s).marchSpeed + academyBuffs(s).marchSpeed) * eraMarchFactor(s));
         s.marches.push({ id: uid(), targetId, targetKind: target.kind, units, formationId, startedAt: now, endsAt: now + dur });
         const label = target.kind === 'camp' ? campName(target.camp!.level) : `замку ${target.bot!.name}`;
         pushLog(s, '🐎', `Армия выступила к ${label}`, 'battle');
@@ -1312,6 +1351,23 @@ export const useGame = create<Store>((set, get) => {
 
       markMailSeen: () => mutate((s) => { s.mailSeen = Date.now(); }, false),
 
+      // Купить комплект сортировки армии за золото.
+      buyBattlePreset: (id) => mutate((s) => {
+        const def = BATTLE_PRESETS.find((p) => p.id === id);
+        if (!def || def.cost <= 0) return;
+        if (s.battlePresets.includes(id)) return;
+        if (s.resources.gold < def.cost) return;
+        s.resources.gold -= def.cost;
+        s.battlePresets = [...s.battlePresets, id];
+        pushLog(s, '🎖️', `Открыт комплект «${def.name}».`, 'info');
+      }),
+
+      // Сохранить расстановку комплекта (для Комплекта I/II и Быстрой атаки).
+      saveBattleLayout: (id, layout) => mutate((s) => {
+        if (id === 'default') return;
+        s.battleLayouts = { ...s.battleLayouts, [id]: layout };
+      }, false),
+
       // ---------- Онлайн: атака на реального игрока ----------
       sendPlayerAttack: (enemy, units, formationId) => mutate((s) => {
         const now = Date.now();
@@ -1326,7 +1382,7 @@ export const useGame = create<Store>((set, get) => {
           s.shieldUntil = 0; // атака снимает свой щит
           pushLog(s, '⚠️', 'Твой щит снят: ты начал атаку.', 'info');
         }
-        const dur = marchTimeMs(s.playerPos, { x: enemy.x, y: enemy.y }, 1 + heroBuffs(s).marchSpeed + academyBuffs(s).marchSpeed);
+        const dur = marchTimeMs(s.playerPos, { x: enemy.x, y: enemy.y }, (1 + heroBuffs(s).marchSpeed + academyBuffs(s).marchSpeed) * eraMarchFactor(s));
         s.marches.push({ id: uid(), targetId: enemy.id, targetKind: 'player', units, formationId, enemy, startedAt: now, endsAt: now + dur });
         pushLog(s, '🐎', `Армия выступила к замку лорда ${enemy.nick}`, 'battle');
       }),

@@ -5,7 +5,7 @@ import { buildingCost, buildingTimeMs, canAfford, fmt, fmtDuration } from '../ga
 import {
   ACADEMY_BRANCHES, ACADEMY_ERAS, ACADEMY_NODE_MAX,
   academyAvailablePoints, academyBranchNodes, academyEra, academyEraUnlocked,
-  academyNodeUnlocked, academyTotalPoints, type AcademyBranch,
+  academyNodeUnlocked, academyTotalPoints, eraProgress, eraResearchable, type AcademyBranch,
 } from '../game/academy';
 import type { Resource, Resources } from '../game/types';
 import { SpeedUpButton } from '../components/BuildingModal';
@@ -97,7 +97,9 @@ function AcademyTree() {
   const points = academyAvailablePoints(s);
   const [era, setEra] = useState(1);
   const eraDef = academyEra(era);
-  const eraOpen = academyEraUnlocked(era, castle);
+  const castleOpen = academyEraUnlocked(era, castle);
+  const eraOpen = eraResearchable(s, era);                  // Замок + 75% предыдущей эры
+  const prevPct = era > 1 ? Math.round(eraProgress(s, era - 1) * 100) : 100;
   const branches = Object.keys(ACADEMY_BRANCHES) as AcademyBranch[];
 
   return (
@@ -115,7 +117,11 @@ function AcademyTree() {
         })}
       </div>
 
-      <div className="ac-lore">«{eraDef.lore}»{!eraOpen && <b style={{ color: 'var(--red)' }}> — нужен Замок ур. {eraDef.unlockCastle}</b>}</div>
+      <div className="ac-lore">
+        «{eraDef.lore}»
+        {!castleOpen && <b style={{ color: 'var(--red)' }}> — нужен Замок ур. {eraDef.unlockCastle}</b>}
+        {castleOpen && !eraOpen && <b style={{ color: 'var(--red)' }}> — откройте 75% эпохи {ACADEMY_ERAS[era - 2]?.roman} (сейчас {prevPct}%)</b>}
+      </div>
 
       {/* шапки ветвей */}
       <div className="ac-cols-head">
