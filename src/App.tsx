@@ -11,7 +11,6 @@ import MapTopPanel from './components/MapTopPanel';
 import MapButton from './components/MapButton';
 import FactionSelect from './components/FactionSelect';
 import BattleReportModal from './components/BattleReportModal';
-import Toasts from './components/Toasts';
 import DevConsole from './components/DevConsole';
 import KingdomView from './views/KingdomView';
 import MapView from './views/MapView';
@@ -20,6 +19,7 @@ import ResearchView from './views/ResearchView';
 import QuestsView from './views/QuestsView';
 import Page from './components/Page';
 import ParagonPage from './components/windows/ParagonPage';
+import HeroPage from './components/windows/HeroPage';
 import ProfilePage from './components/windows/ProfilePage';
 import {
   AlliancePage, BookmarksWindow, FindWindow, ItemsPage, LeaderboardPage,
@@ -88,7 +88,6 @@ export default function App() {
       <BottomNav />
       <AnimatePresence>{ui.mapWindow && <MapWindowRouter key={ui.mapWindow} />}</AnimatePresence>
       <BattleReportModal />
-      <Toasts />
       <DevConsole />
     </div>
   );
@@ -102,6 +101,7 @@ function PageRouter() {
     case 'research': return <Page icon="📜" title="Академия"><ResearchView /></Page>;
     case 'profile': return <ProfilePage />;
     case 'paragon': return <ParagonPage />;
+    case 'hero': return <HeroPage />;
     case 'alliance': return <AlliancePage />;
     case 'items': return <ItemsPage />;
     case 'mail': return <MailPage />;

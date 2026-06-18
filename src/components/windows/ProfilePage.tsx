@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { useGame } from '../../game/store';
-import { FACTIONS } from '../../game/config';
+import { BUILDINGS, FACTIONS, RESOURCE_BUILDING_IDS, RESOURCE_ZONE_SIZE } from '../../game/config';
+import type { ResourceBuildingId } from '../../game/types';
 import { fmt, powerBreakdown } from '../../game/balance';
 import { availablePoints, levelFromXP, paragonSpent } from '../../game/paragon';
 import Page, { SectionTitle, StatRow } from '../Page';
@@ -117,9 +118,19 @@ export default function ProfilePage() {
       {tab === 'city' && (
         <>
           <SectionTitle>Здания города</SectionTitle>
-          {Object.entries(s.buildings).map(([id, lvl]) => (
-            <StatRow key={id} label={buildingName(id)} value={`ур. ${lvl}`} />
-          ))}
+          {Object.entries(s.buildings)
+            .filter(([id]) => !RESOURCE_BUILDING_IDS.includes(id as ResourceBuildingId))
+            .map(([id, lvl]) => (
+              <StatRow key={id} label={buildingName(id)} value={`ур. ${lvl}`} />
+            ))}
+          <SectionTitle>Ресурсная зона</SectionTitle>
+          <StatRow label="Застроено участков" value={`${s.resourceZone.filter((p) => p.type).length} / ${RESOURCE_ZONE_SIZE}`} accent />
+          {RESOURCE_BUILDING_IDS.map((id) => {
+            const plots = s.resourceZone.filter((p) => p.type === id);
+            if (!plots.length) return null;
+            const lvls = plots.map((p) => p.level).join(', ');
+            return <StatRow key={id} label={`${BUILDINGS[id].name} ×${plots.length}`} value={`ур. ${lvls}`} />;
+          })}
           <SectionTitle>Армия</SectionTitle>
           <StatRow label="Всего войск" value={totalTroops} accent />
         </>

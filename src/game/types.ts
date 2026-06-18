@@ -7,6 +7,18 @@ export type BuildingId =
   | 'castle' | 'farm' | 'ironMine' | 'lumberMill' | 'silverMine'
   | 'barracks' | 'academy' | 'temple' | 'tavern' | 'embassy';
 
+/** Здания-производители, которые игрок ставит на участки ресурсной зоны. */
+export type ResourceBuildingId = 'farm' | 'ironMine' | 'lumberMill' | 'silverMine';
+
+/** Один участок (plot) ресурсной зоны: пустой (type=null) либо застроенный. */
+export interface ResourcePlot {
+  type: ResourceBuildingId | null;
+  level: number;
+}
+
+/** Шаги стартового онбординга ресурсной зоны. */
+export type TutorialStep = 'intro' | 'choose' | 'finish';
+
 export type ResearchId = 'economy' | 'construction' | 'attack' | 'defense';
 
 export type UnitClass = 'sword' | 'spear' | 'cavalry' | 'ranged' | 'siege' | 'shadow';
@@ -63,6 +75,8 @@ export interface QueueItem {
 export interface BuildTask extends QueueItem {
   building: BuildingId;
   targetLevel: number;
+  /** Если задан — стройка относится к участку ресурсной зоны (resourceZone[plot]). */
+  plot?: number;
 }
 
 export interface ResearchTask extends QueueItem {
@@ -157,7 +171,8 @@ export interface LogEntry {
   at: number;
   icon: string;
   text: string;
-  kind: 'battle' | 'raid' | 'build' | 'info' | 'gold';
+  kind: 'battle' | 'raid' | 'build' | 'info' | 'gold' | 'scout';
+  side?: 'own' | 'enemy';   // для разведки: чей шпион (свой — зелёный, чужой — красный)
 }
 
 export interface BattleReport {
@@ -177,13 +192,99 @@ export interface DailyQuestState {
 
 export type View = 'kingdom' | 'map' | 'army' | 'research' | 'quests';
 
+/** Сохранённая расстановка армии для комплекта сортировки. */
+export interface BattleLayout {
+  formationId: string;
+  slots: Record<string, { unitId: string; count: number }>;
+}
+
+// ============================================================
+//  ГЕРОЙ (Champion System)
+// ============================================================
+export type HeroId = 'economist' | 'commander' | 'logistician' | 'tactician';
+
+/** 10 слотов экипировки героя: слева 5, справа 5. */
+export type EquipSlot =
+  | 'helmet' | 'chest' | 'weapon' | 'ring1' | 'trophy'      // левая колонка
+  | 'gloves' | 'boots' | 'weapon2' | 'ring2' | 'cloak';    // правая колонка
+/** Категория предмета (определяет, в какой слот его можно надеть). */
+export type GearSlot = 'helmet' | 'chest' | 'weapon' | 'ring' | 'trophy' | 'gloves' | 'boots' | 'cloak';
+/** Редкость предмета. */
+export type GearRarity = 'common' | 'rare' | 'epic' | 'legendary';
+
+/** Экземпляр предмета экипировки (генерируется при выпадении). */
+export interface HeroGearItem {
+  id: string;                                   // уникальный id экземпляра
+  name: string;
+  icon: string;
+  slot: GearSlot;
+  rarity: GearRarity;
+  level: number;                                // уровень источника (лагеря)
+  mods: Partial<Record<HeroBuffKey, number>>;   // % бонусы
+}
+
+/**
+ * Единый словарь множителей-баффов героя (аддитивные доли, напр. 0.15 = +15%).
+ * Источники: пассивка архетипа + таланты + экипировка. Сводит BuffManager.
+ */
+export type HeroBuffKey =
+  // экономика
+  | 'resourceProduction' | 'constructionSpeed' | 'researchSpeed' | 'gatheringSpeed'
+  // поддержка
+  | 'trainingSpeed' | 'hospitalCapacity' | 'healingSpeed' | 'heroEnergy'
+  // военное (общее)
+  | 'marchSpeed' | 'marchCapacity'
+  // атака по родам войск
+  | 'infantryAttack' | 'cavalryAttack' | 'rangedAttack' | 'siegeAttack'
+  // защита по родам войск
+  | 'infantryDefense' | 'cavalryDefense' | 'rangedDefense' | 'siegeDefense'
+  // универсальные
+  | 'allTroopAttack' | 'allTroopDefense';
+
+export interface HeroExpedition {
+  id: string;
+  startedAt: number;
+  endsAt: number;
+}
+
+/** Прогрессия одного героя из коллекции (у каждого свой уровень/таланты/снаряжение). */
+export interface HeroInstance {
+  id: HeroId;                                 // архетип героя
+  exp: number;                                // суммарный опыт (уровень выводится из него)
+  level: number;                              // кэш уровня (синхронизируется с exp)
+  talents: Record<string, number>;            // nodeId → ранг
+  equipment: Record<EquipSlot, HeroGearItem | null>; // надетые предметы по слотам
+  energy: number;                             // текущая энергия героя
+  energyAt: number;                           // момент последнего пересчёта энергии
+  expedition: HeroExpedition | null;          // активный поход (Sovereign Journey)
+}
+
+/** Коллекция разблокированных героев (unlocked_heroes_list) по их id. */
+export type HeroCollection = Record<string, HeroInstance>;
+
+/** Состояние всей системы героев. */
+export interface HeroSystemData {
+  selected: boolean;        // стартовый выбор сделан → UI выбора заблокирован
+  activeId: HeroId | null;  // активный герой (active_hero)
+  heroes: HeroCollection;   // разблокированные герои с их прогрессией
+  gearInventory: Record<string, HeroGearItem>; // склад ненадетых предметов (id → предмет)
+}
+
 export interface GameState {
   started: boolean;
   playerName: string;
   faction: FactionId;
   resources: Resources;
   buildings: Record<BuildingId, number>;
+  resourceZone: ResourcePlot[];   // 12 участков ресурсной зоны
+  onboarded: boolean;             // стартовый туториал пройден
+  tutorialStep: TutorialStep | null; // активный шаг онбординга (null = не активен)
   research: Record<ResearchId, number>;
+  academy: Record<string, number>;   // Академия: nodeId → ранг (древо эпох)
+  barbXp: number;                    // Опыт Варваров (открывает уровни лагерей)
+  nextCampRefreshAt: number;         // когда обновить лагеря варваров на карте
+  battlePresets: string[];           // купленные комплекты сортировки армии
+  battleLayouts: Record<string, BattleLayout>; // сохранённые расстановки по комплектам
   army: Record<string, number>;
   buildQueue: BuildTask[];
   researchQueue: ResearchTask[];
@@ -213,6 +314,7 @@ export interface GameState {
     scoutsSent: number; lootedResources: number; raidsSuffered: number;
   };
   paragon: { xp: number; nodes: Record<string, number>; abilities: Record<string, number> };
+  heroSystem: HeroSystemData;  // система героев (выбор, активный, коллекция)
   inventory: Record<string, number>;
   lotteryDate: string;   // YYYY-MM-DD последнего розыгрыша
   mailSeen: number;      // timestamp последнего просмотра почты

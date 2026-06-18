@@ -1,25 +1,26 @@
 * { margin: 0; padding: 0; box-sizing: border-box; }
 
 :root {
-  --bg: #14181f;
-  --panel: #1d242e;
-  --panel2: #242d3a;
-  --border: #344256;
-  --gold: #f5c542;
-  --text: #e8e2d4;
-  --muted: #8d99ab;
-  --green: #58c472;
-  --red: #e05858;
-  --blue: #4f8fde;
-  /* олдскул-палитра: дерево/латунь/золото */
-  --wood-dark: #241708;
-  --wood: #3a2814;
-  --wood-light: #563c1f;
-  --brass: #b8923a;
-  --gold2: #e6c060;
-  --gold-lt: #f6e2a0;
-  --gold-dk: #7a5c1c;
-  --parch: #ecdfbe;
+  /* СВЕТЛАЯ ТЕМА (пергамент) */
+  --bg: #e4d8bb;
+  --panel: #f6efda;
+  --panel2: #ebdfc1;
+  --border: #c2a978;
+  --gold: #c79a2b;
+  --text: #2c2417;
+  --muted: #7a6a48;
+  --green: #2f7d3a;
+  --red: #bb3a30;
+  --blue: #2c5a9e;
+  /* олдскул-палитра: светлое дерево/латунь/золото */
+  --wood-dark: #b79b6a;
+  --wood: #cdb487;
+  --wood-light: #e2cfa3;
+  --brass: #a9853a;
+  --gold2: #c79a2b;
+  --gold-lt: #8a6512;   /* «золотой» текст, читаемый на светлом */
+  --gold-dk: #8a6a2a;
+  --parch: #43381f;     /* тёмный тёплый текст */
   --serif: 'Cinzel', 'Trajan Pro', 'Georgia', 'Times New Roman', serif;
 }
 
@@ -1104,6 +1105,188 @@ h1, h2, h3, .serif { font-family: var(--serif); }
 }
 .name-input:focus { outline: none; border-color: var(--gold); }
 
+/* ---------- Экран выбора титула (flip-карточки) ---------- */
+.title-select {
+  height: 100%; overflow-y: auto;
+  display: flex; flex-direction: column; align-items: center;
+  padding: 28px 16px 44px;
+}
+.ts-sub { text-align: center; margin-top: 8px; }
+.title-grid {
+  display: grid; grid-template-columns: repeat(4, 1fr);
+  gap: 16px; width: 100%; max-width: 1080px; margin-top: 20px;
+}
+@media (max-width: 900px) { .title-grid { grid-template-columns: repeat(2, 1fr); } }
+@media (max-width: 480px) { .title-grid { grid-template-columns: 1fr; } }
+
+.flip-card { perspective: 1400px; height: 432px; cursor: pointer; }
+.flip-card-inner {
+  position: relative; width: 100%; height: 100%;
+  transition: transform 0.6s cubic-bezier(0.4, 0.2, 0.2, 1);
+  transform-style: preserve-3d;
+}
+.flip-card.flipped .flip-card-inner { transform: rotateY(180deg); }
+
+.flip-face {
+  position: absolute; inset: 0;
+  -webkit-backface-visibility: hidden; backface-visibility: hidden;
+  border-radius: 16px; padding: 16px;
+  display: flex; flex-direction: column;
+  background: linear-gradient(180deg, var(--panel), #161d27);
+  border: 2px solid var(--border);
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.45);
+}
+.flip-face { transition: border-color 0.15s, box-shadow 0.15s; }
+.flip-front { align-items: center; text-align: center; justify-content: space-between; }
+.flip-card:hover .flip-front { border-color: var(--fc); box-shadow: 0 12px 34px rgba(0, 0, 0, 0.55); }
+.flip-back { transform: rotateY(180deg); overflow-y: auto; }
+
+.tc-title { font-family: var(--serif); font-size: 27px; letter-spacing: 1px; margin-top: 2px; }
+.tc-realm { font-size: 12px; color: var(--muted); }
+.tc-tagline { font-size: 13px; color: var(--parch); line-height: 1.45; margin: 8px 4px 0; }
+.tc-hint { font-size: 11px; color: var(--gold-lt); opacity: 0.8; margin-top: auto; }
+
+.tc-back-title { font-family: var(--serif); font-size: 22px; text-align: center; }
+.tc-section {
+  font-size: 12px; font-weight: 700; color: var(--gold-lt);
+  margin: 10px 0 4px; padding-bottom: 3px; border-bottom: 1px solid var(--border);
+}
+.tc-line { font-size: 12.5px; color: var(--text); margin: 2px 0; }
+.tc-identity { font-size: 12px; font-style: italic; color: var(--muted); }
+.tc-ability { color: var(--green); font-weight: 700; }
+.tc-choose { width: 100%; margin-top: 12px; padding: 10px; }
+
+.ts-note {
+  margin-top: 24px; max-width: 640px; text-align: center;
+  font-size: 12.5px; color: var(--muted); line-height: 1.5;
+}
+
+/* ---------- Армия: вкладки, гарнизон, донесения ---------- */
+.atab-badge {
+  margin-left: 5px; background: var(--red); color: #fff;
+  border-radius: 9px; font-size: 10px; font-weight: 700; padding: 1px 5px;
+}
+.garrison {
+  display: grid; grid-template-columns: repeat(6, 1fr); gap: 6px; margin-top: 10px;
+}
+@media (max-width: 460px) { .garrison { grid-template-columns: repeat(3, 1fr); } }
+.garrison-cell {
+  display: flex; flex-direction: column; align-items: center; gap: 2px;
+  background: var(--panel2); border: 1px solid var(--border); border-radius: 8px; padding: 6px 2px;
+}
+.garrison-cell .g-ic { font-size: 20px; }
+.garrison-cell .g-n { font-size: 12px; font-weight: 700; color: var(--gold-lt); }
+
+.rep-head {
+  display: flex; align-items: center; justify-content: space-between;
+  gap: 8px; margin: 4px 0 10px;
+}
+.rep-list { display: flex; flex-direction: column; gap: 7px; }
+.rep-row {
+  display: flex; gap: 10px; align-items: flex-start;
+  background: var(--panel); border: 1px solid var(--border);
+  border-left-width: 3px; border-radius: 10px; padding: 9px 11px;
+}
+.rep-ic { font-size: 18px; line-height: 1.2; }
+.rep-main { flex: 1; min-width: 0; }
+.rep-text { font-size: 13px; color: var(--parch); }
+.rep-time { font-size: 11px; color: var(--muted); margin-top: 2px; }
+.rep-battle { border-left-color: var(--blue); }
+.rep-raid { border-left-color: var(--red); }
+.rep-own { border-left-color: var(--green); }
+.rep-own .rep-text { color: #b9efc4; }
+.rep-enemy { border-left-color: var(--red); }
+.rep-enemy .rep-text { color: #f0b3b3; }
+
+/* ---------- Академия: древо эпох ---------- */
+.ac-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 10px; }
+.ac-head h3 { color: var(--gold-lt); }
+.ac-eras { display: grid; grid-template-columns: repeat(5, 1fr); gap: 6px; }
+.ac-era {
+  display: flex; flex-direction: column; align-items: center; gap: 1px;
+  background: linear-gradient(180deg, #2c3644, #222b38); border: 1px solid #46566c;
+  border-radius: 8px; padding: 6px 2px; cursor: pointer; font-family: inherit;
+  color: #e3e9f1; transition: all 0.15s;
+}
+.ac-era .ac-era-rom { font-family: var(--serif); font-size: 17px; font-weight: 800; }
+.ac-era .ac-era-name { font-size: 10px; opacity: 0.85; }
+.ac-era.sel { background: linear-gradient(180deg, var(--gold-lt), var(--brass)); color: #1a1206; border-color: var(--gold-lt); }
+.ac-era.locked { opacity: 0.5; }
+.ac-lore {
+  font-size: 12px; font-style: italic; color: var(--parch);
+  margin: 8px 0 10px; text-align: center;
+}
+
+.ac-branches { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+@media (max-width: 720px) { .ac-branches { grid-template-columns: 1fr; } }
+.ac-branch {
+  background: #11161d; border: 1px solid var(--border);
+  border-top: 3px solid var(--bc, var(--border)); border-radius: 10px; overflow: hidden;
+}
+.ac-branch-head {
+  font-size: 12.5px; font-weight: 800; color: var(--bc, var(--gold-lt));
+  padding: 7px 8px; text-align: center; background: rgba(255,255,255,0.03);
+  border-bottom: 1px solid var(--border);
+}
+.ac-branch-list { max-height: 360px; overflow-y: auto; padding: 6px; display: flex; flex-direction: column; gap: 5px; }
+.ac-node {
+  display: flex; align-items: center; gap: 7px; text-align: left;
+  background: #1b222c; border: 1px solid var(--border); border-radius: 8px;
+  padding: 6px 8px; cursor: pointer; font-family: inherit; color: var(--text); transition: all 0.12s;
+}
+.ac-node.buyable { border-color: var(--bc, var(--gold)); box-shadow: 0 0 0 1px var(--bc, var(--gold)) inset; }
+.ac-node.maxed { opacity: 0.85; border-color: var(--gold-dk); }
+.ac-node.locked { opacity: 0.5; cursor: not-allowed; }
+.ac-node:disabled { cursor: not-allowed; }
+.ac-node-ic { font-size: 16px; width: 18px; text-align: center; }
+.ac-node-main { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.ac-node-name { font-size: 12px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.ac-node-sub { font-size: 10.5px; color: var(--green); }
+.ac-node-rank { display: flex; gap: 3px; }
+.ac-pip { width: 7px; height: 7px; border-radius: 50%; background: #2d3744; border: 1px solid var(--border); }
+.ac-pip.on { background: var(--gold); border-color: var(--gold-lt); }
+
+/* ---------- Почта в стиле Gmail (адаптировано под игру) ---------- */
+.gm-toolbar {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 8px 12px; margin-bottom: 8px;
+  background: linear-gradient(180deg, #2c2031, #1d1622);
+  border: 1px solid var(--gold-dk); border-radius: 10px;
+}
+.gm-tb-title { font-family: var(--serif); font-weight: 800; color: var(--gold-lt); }
+.gm-tb-count { font-size: 11.5px; color: #b39b6a; }
+.gm-list {
+  background: #14181f; border: 1px solid var(--border); border-radius: 10px; overflow: hidden;
+}
+.gm-row {
+  display: flex; align-items: center; gap: 8px;
+  padding: 9px 10px; border-bottom: 1px solid #222b36;
+  font-size: 13px; cursor: default; transition: background 0.1s;
+}
+.gm-row:last-child { border-bottom: none; }
+.gm-row:nth-child(even) { background: rgba(255,255,255,0.015); }
+.gm-row:hover { background: rgba(255,255,255,0.05); }
+.gm-row.unread { background: rgba(245,197,66,0.06); }
+.gm-row.unread .gm-from, .gm-row.unread .gm-msg { font-weight: 700; color: #fff; }
+.gm-star { color: #5a6675; font-size: 13px; }
+.gm-row.unread .gm-star { color: var(--gold); }
+.gm-from { flex: 0 0 96px; font-weight: 600; color: var(--parch); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.gm-from.gm-blue { color: #6fa6e8; }
+.gm-from.gm-red { color: #e88; }
+.gm-from.gm-green { color: #6fd089; }
+.gm-from.gm-gold { color: var(--gold-lt); }
+.gm-from.gm-slate { color: #9fb0c2; }
+.gm-msg { flex: 1; min-width: 0; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.gm-time { flex: 0 0 auto; font-size: 11px; color: #8390a0; }
+@media (max-width: 460px) {
+  .gm-from { flex-basis: 70px; }
+  .gm-msg { white-space: normal; }
+}
+
+/* лёгкая полировка строк-списков под «инбокс» */
+.wrow { transition: border-color 0.12s, transform 0.06s; }
+.wrow:hover { border-color: var(--gold-dk); }
+
 h1.title {
   font-size: clamp(26px, 5vw, 42px);
   background: linear-gradient(180deg, #f8e7b0, #c89b2a);
@@ -1169,3 +1352,479 @@ h1.title {
 ::-webkit-scrollbar { width: 8px; }
 ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 4px; }
 ::-webkit-scrollbar-track { background: transparent; }
+
+/* ---------- Ресурсная зона ---------- */
+.rz-card { position: relative; }
+.rz-card h3 { font-size: 15px; display: flex; align-items: center; gap: 8px; }
+.rz-hint {
+  text-align: center; font-size: 13px; color: var(--gold-lt);
+  margin-bottom: 8px; animation: rz-bob 1.2s ease-in-out infinite;
+}
+@keyframes rz-bob { 0%,100% { transform: translateY(0); } 50% { transform: translateY(-3px); } }
+
+.rz-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 8px;
+}
+@media (max-width: 420px) { .rz-grid { grid-template-columns: repeat(3, 1fr); } }
+
+.rz-cell {
+  position: relative;
+  display: flex; flex-direction: column; align-items: center; justify-content: flex-end;
+  aspect-ratio: 1 / 1;
+  background: radial-gradient(120% 90% at 50% 25%, #28323f 0%, #1a212b 100%);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 4px;
+  cursor: pointer;
+  font-family: inherit;
+  color: var(--text);
+  overflow: hidden;
+  transition: filter 0.15s, transform 0.1s, border-color 0.15s;
+}
+.rz-cell:hover:not(:disabled) { filter: brightness(1.12); border-color: #4f7ec0; }
+.rz-cell:active:not(:disabled) { transform: scale(0.97); }
+.rz-cell.locked { opacity: 0.4; cursor: default; filter: grayscale(0.5); }
+.rz-cell.empty {
+  border-style: dashed;
+  background: repeating-linear-gradient(45deg, #1c232e 0 6px, #1f2630 6px 12px);
+}
+.rz-plus { font-size: 26px; color: var(--muted); margin: auto; }
+.rz-cell.pulse {
+  border: 2px solid var(--gold);
+  box-shadow: 0 0 0 0 rgba(245,197,66,0.55);
+  animation: rz-pulse 1.3s ease-out infinite;
+  opacity: 1;
+}
+@keyframes rz-pulse {
+  0% { box-shadow: 0 0 0 0 rgba(245,197,66,0.5); }
+  70% { box-shadow: 0 0 0 12px rgba(245,197,66,0); }
+  100% { box-shadow: 0 0 0 0 rgba(245,197,66,0); }
+}
+.rz-glyph { width: 100%; height: 70%; margin-top: 2px; }
+.rz-lvl {
+  position: absolute; top: 4px; right: 5px;
+  min-width: 17px; text-align: center;
+  background: #0d1320; border: 1px solid var(--border); border-radius: 9px;
+  font-size: 11px; font-weight: 700; color: var(--gold-lt); padding: 0 4px;
+}
+.rz-rate { font-size: 10.5px; color: var(--green); font-weight: 600; white-space: nowrap; }
+.rz-build { font-size: 10.5px; color: var(--gold-lt); width: 100%; text-align: center; }
+.rz-build .progress-bar { height: 5px; margin-top: 3px; }
+
+/* выбор здания в окне участка */
+.rz-pick { display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px; margin-bottom: 6px; }
+.rz-pick-opt {
+  display: flex; flex-direction: column; align-items: center; gap: 2px;
+  background: var(--panel2); border: 1px solid var(--border); border-radius: 10px;
+  padding: 8px 6px; cursor: pointer; font-family: inherit; color: var(--text);
+  transition: border-color 0.15s, background 0.15s;
+}
+.rz-pick-opt:hover { border-color: #4f7ec0; }
+.rz-pick-opt.sel { border-color: var(--gold); background: #2a2920; box-shadow: 0 0 0 1px var(--gold) inset; }
+.rz-pick-ico { font-size: 22px; }
+.rz-pick-name { font-size: 12.5px; font-weight: 600; }
+.rz-pick-rate { font-size: 11px; color: var(--green); }
+
+/* ---------- Онбординг: затемнение и фокус ---------- */
+.tut-overlay {
+  position: fixed; inset: 0;
+  background: rgba(5, 8, 12, 0.78);
+  z-index: 90;
+  backdrop-filter: blur(2px);
+  display: flex; align-items: center; justify-content: center;
+  padding: 20px;
+}
+.tut-overlay .rz-card {
+  width: min(560px, 94vw);
+  max-height: 86vh; overflow-y: auto;
+  margin: 0;
+}
+.tut-dim { opacity: 0.35; pointer-events: none; filter: grayscale(0.4); }
+.rz-focus {
+  box-shadow: 0 0 0 2px var(--gold), 0 18px 50px rgba(0,0,0,0.6);
+}
+
+/* ---------- Советник ---------- */
+.advisor-backdrop { z-index: 120; }
+.advisor { width: min(400px, 92vw); border-color: var(--gold-dk); }
+.advisor-head { display: flex; align-items: center; gap: 8px; margin-bottom: 10px; }
+.advisor-face { font-size: 30px; }
+.advisor-head b { font-family: var(--serif); font-size: 17px; color: var(--gold-lt); }
+.advisor-text {
+  font-size: 14.5px; line-height: 1.5; font-style: italic;
+  color: var(--parch); margin-bottom: 14px;
+}
+
+/* ============================================================
+   ГЕРОЙ (Champion System)
+   ============================================================ */
+/* --- Оверлей выбора героя --- */
+.hero-pick-backdrop { z-index: 130; }
+.hero-pick { width: min(760px, 96vw); border-color: var(--gold-dk); }
+.hero-pick-grid {
+  display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; margin-bottom: 12px;
+}
+@media (min-width: 720px) { .hero-pick-grid { grid-template-columns: repeat(4, 1fr); } }
+.hero-card {
+  display: flex; flex-direction: column; align-items: center; text-align: center;
+  background: var(--panel2); border: 1.5px solid var(--border); border-radius: 12px;
+  padding: 12px 10px; cursor: pointer; font-family: inherit; color: var(--text);
+  transition: border-color 0.15s, transform 0.1s, box-shadow 0.15s;
+}
+.hero-card:hover { border-color: var(--hc); }
+.hero-card.sel { border-color: var(--hc); box-shadow: 0 0 0 2px var(--hc) inset, 0 8px 24px rgba(0,0,0,0.5); }
+.hero-card-portrait {
+  width: 60px; height: 60px; border-radius: 50%;
+  display: flex; align-items: center; justify-content: center; font-size: 32px;
+  background: radial-gradient(circle at 50% 35%, color-mix(in srgb, var(--hc) 55%, #1a212b), #14181f);
+  border: 2px solid var(--hc); margin-bottom: 8px;
+}
+.hero-card-name { font-family: var(--serif); font-size: 16px; color: var(--gold-lt); }
+.hero-card-title { font-size: 11.5px; color: var(--muted); margin-bottom: 8px; }
+.hero-card-buffs { list-style: none; padding: 0; margin: 0 0 8px; font-size: 12px; }
+.hero-card-buffs li { color: var(--green); margin: 2px 0; }
+.hero-card-blurb { font-size: 11px; color: var(--parch); line-height: 1.4; opacity: 0.85; }
+
+/* --- Шапка героя на странице --- */
+.hero-hero {
+  display: flex; align-items: center; gap: 12px; margin-bottom: 12px;
+  background: linear-gradient(90deg, color-mix(in srgb, var(--hc) 28%, var(--panel)), var(--panel));
+  border: 1px solid var(--border); border-radius: 12px; padding: 12px;
+}
+.hero-hero-portrait {
+  position: relative; width: 56px; height: 56px; border-radius: 50%; flex-shrink: 0;
+  display: flex; align-items: center; justify-content: center; font-size: 30px;
+  background: radial-gradient(circle at 50% 35%, color-mix(in srgb, var(--hc) 55%, #1a212b), #14181f);
+  border: 2px solid var(--hc);
+}
+.hero-hero-lvl {
+  position: absolute; bottom: -4px; right: -4px; min-width: 22px; text-align: center;
+  background: #0d1320; border: 1px solid var(--gold); border-radius: 11px;
+  font-size: 12px; font-weight: 700; color: var(--gold-lt); padding: 0 5px;
+}
+.hero-hero-main { flex: 1; }
+.hero-hero-name { font-family: var(--serif); font-size: 18px; color: var(--gold-lt); }
+.hero-hero-title { font-size: 12px; color: var(--muted); }
+
+/* --- Вкладки --- */
+.hero-tabs { display: flex; gap: 6px; margin-bottom: 12px; flex-wrap: wrap; }
+.hero-tab {
+  flex: 1; min-width: 84px;
+  background: linear-gradient(180deg, #2c3644, #222b38);
+  border: 1px solid #46566c;
+  border-radius: 8px; padding: 8px 6px; font-size: 12.5px; font-weight: 700;
+  color: #e3e9f1; cursor: pointer; font-family: inherit; transition: all 0.15s;
+  text-shadow: 0 1px 2px rgba(0,0,0,0.6);
+}
+.hero-tab:hover { border-color: #6f8db5; }
+.hero-tab.sel {
+  color: #1a1206; border-color: var(--gold-lt);
+  background: linear-gradient(180deg, var(--gold-lt), var(--brass));
+  text-shadow: none;
+}
+/* читаемость во вкладках и на светлой странице, и на тёмной */
+.page-body .hero-tab { color: #e3e9f1; }
+.page-body .hero-tab.sel { color: #1a1206; }
+
+/* --- Атрибуты --- */
+.hero-attrs { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; }
+@media (max-width: 460px) { .hero-attrs { grid-template-columns: repeat(2, 1fr); } }
+.hero-attr {
+  display: flex; flex-direction: column; align-items: center; gap: 2px;
+  background: var(--panel2); border: 1px solid var(--border); border-radius: 10px; padding: 10px 6px;
+}
+.hero-attr-ic { font-size: 20px; }
+.hero-attr-val { font-size: 17px; font-weight: 700; color: var(--gold-lt); }
+.hero-attr-name { font-size: 11px; color: var(--muted); }
+
+/* --- Энергия / бонусы --- */
+.hero-energy { margin-bottom: 4px; }
+.hero-buffs { display: flex; flex-wrap: wrap; gap: 6px; }
+.hero-buff-chip {
+  display: flex; align-items: center; gap: 6px; font-size: 12px;
+  background: var(--panel2); border: 1px solid var(--border); border-radius: 8px; padding: 5px 9px;
+}
+
+/* --- Смена героя --- */
+.hero-swap-row { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+.hero-swap-card {
+  display: flex; flex-direction: column; align-items: center; gap: 3px; text-align: center;
+  background: var(--panel2); border: 1px solid var(--border); border-radius: 10px;
+  padding: 9px 6px; cursor: pointer; font-family: inherit; color: var(--text); transition: all 0.15s;
+}
+.hero-swap-card:hover:not(:disabled) { border-color: var(--hc); }
+.hero-swap-card:disabled { opacity: 0.5; cursor: not-allowed; }
+.hero-swap-ic { font-size: 22px; }
+.hero-swap-name { font-size: 12px; font-weight: 600; color: var(--gold-lt); }
+.hero-swap-sig { font-size: 10.5px; color: var(--green); }
+
+/* --- Кузница --- */
+.forge-slots { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-bottom: 6px; }
+.forge-slot {
+  display: flex; flex-direction: column; align-items: center; gap: 4px;
+  aspect-ratio: 1 / 1; background: radial-gradient(120% 90% at 50% 25%, #28323f, #1a212b);
+  border: 1.5px dashed var(--border); border-radius: 10px; padding: 6px;
+  cursor: pointer; font-family: inherit; color: var(--text); transition: all 0.15s;
+  justify-content: center;
+}
+.forge-slot.filled { border-style: solid; border-color: var(--rc, var(--border)); }
+.forge-slot.sel { box-shadow: 0 0 0 2px var(--gold) inset; }
+.forge-slot-ic { font-size: 26px; }
+.forge-slot-name { font-size: 10.5px; color: var(--muted); text-align: center; line-height: 1.2; }
+
+.exped-row { align-items: flex-start; }
+.exped-row .wr-ic { font-size: 20px; }
+
+/* ============================================================
+   СВЕТЛАЯ ТЕМА — переопределение тёмных поверхностей
+   ============================================================ */
+body { background: #d8c8a3; }
+.app { background: radial-gradient(1200px 520px at 50% -200px, #f3ead2 0%, transparent 70%), var(--bg); }
+
+/* ВЕРХ/НИЗ/МЕДАЛЬОНЫ — оставляем тёмное дерево (как было до светлой темы) */
+.topbar, .topband {
+  background: linear-gradient(180deg, #3a2814, #241708);
+  border-bottom: 3px solid #b8923a;
+  box-shadow: 0 3px 12px rgba(0,0,0,0.5), inset 0 -2px 0 rgba(0,0,0,0.4);
+}
+.bottomnav {
+  background:
+    repeating-linear-gradient(90deg, rgba(0,0,0,0.18) 0 7px, transparent 7px 14px),
+    linear-gradient(180deg, #4a3219, #2e1f0e 55%, #1c1207) !important;
+  border-top: 3px solid #b8923a;
+  box-shadow: 0 -4px 14px rgba(0,0,0,0.55), inset 0 2px 0 rgba(246,226,160,0.18);
+}
+.res-pill, .timer-chip { background: linear-gradient(180deg, #1a130a, #0e0a05); border: 1px solid #7a5c1c; color: #ecdfbe; }
+.res-pill .v, .timer-chip .t { color: #f6e2a0; }
+.res-pill.gold { border-color: #f5c542; }
+.res-pill.gold .v { color: #f6e2a0; }
+.res-pill .rate { color: #58c472; }
+.res-pill .rate.neg { color: #e05858; }
+.portrait { background: radial-gradient(circle at 40% 30%, #4a3a22, #1c130a); box-shadow: 0 0 0 2px #7a5c1c, inset 0 0 6px rgba(0,0,0,0.7); }
+.portrait .lvl { background: linear-gradient(180deg, #f6e2a0, #b8923a); color: #2a1c08; border-color: #7a5c1c; }
+.fs-btn { background: linear-gradient(180deg, #4a3a22, #241708); border: 1px solid #7a5c1c; color: #f6e2a0; }
+.res-chip { background: #141a23; border: 1px solid #344256; color: #e8e2d4; }
+.res-chip.gold { background: #201a10; border-color: #6b5618; }
+.res-chip.gold .val { color: #f5c542; }
+/* портрет-кнопка: крупнее и кликабельна */
+.portrait-btn { cursor: pointer; padding: 0; border: none; width: 52px; height: 52px; font-size: 30px; transition: filter 0.12s, transform 0.1s; }
+.portrait-btn:hover { filter: brightness(1.12); }
+.portrait-btn:active { transform: scale(0.95); }
+.portrait-btn .lvl { font-size: 10px; }
+/* медальоны навигации — тёмные диски, латунный кант, золотая подпись */
+.medallion-disc {
+  background: radial-gradient(circle at 38% 30%, #3a2c16 0%, #1c130a 75%);
+  box-shadow: 0 0 0 2px #1a1206, 0 0 0 5px #7a5c1c, 0 0 0 6px #2a1c0c, inset 0 2px 6px rgba(0,0,0,0.7), 0 3px 6px rgba(0,0,0,0.6);
+}
+.medallion-disc::before { background: conic-gradient(from 210deg, #7a5c1c, #f6e2a0 25%, #b8923a 50%, #f6e2a0 72%, #7a5c1c 100%); }
+.medallion.active .medallion-disc { box-shadow: 0 0 0 2px #1a1206, 0 0 0 5px #f6e2a0, 0 0 0 6px #2a1c0c, inset 0 2px 6px rgba(0,0,0,0.6), 0 0 12px rgba(246,226,160,0.5); }
+.medallion-label { color: #f6e2a0; text-shadow: 0 1px 2px #000; }
+
+/* кнопки/инпуты/прогресс/модалки */
+.btn.ghost { background: #ece0c2; border-color: var(--border); color: #2c2417; }
+.progress-bar { background: #d8cba6; }
+.name-input { background: #fbf4e1; border: 1px solid var(--border); color: #2c2417; }
+.modal-backdrop { background: rgba(40, 30, 12, 0.45); }
+.modal { background: linear-gradient(180deg, #f7f0dd, #ece0c2); border: 1px solid var(--brass); box-shadow: 0 20px 60px rgba(0,0,0,0.35); color: #2c2417; }
+.modal h2 { color: #3a2f1a; }
+.close-x { color: #6b5f44; }
+
+/* окна карты */
+.win { background: linear-gradient(180deg, #f7f0dd, #ece0c2); border: 3px solid var(--brass); box-shadow: 0 0 0 2px #d8c290, 0 24px 60px rgba(0,0,0,0.4); }
+.win-head { background: linear-gradient(180deg, #e2cfa3, #cdb079); border-bottom: 2px solid var(--gold-dk); }
+.win-head .wt { color: #4a3a1c; text-shadow: none; }
+
+/* строки-списки */
+.wrow, .page-body .wrow { background: linear-gradient(180deg, #fbf4e1, #f1e6cb); border: 1px solid var(--border); }
+.wrow .wr-ic { background: radial-gradient(circle at 40% 30%, #f0e2bf, #d8c290); box-shadow: 0 0 0 2px var(--gold-dk); }
+.wrow .wr-title, .page-body .wrow .wr-title { color: #2c2417; }
+.wrow .wr-sub { color: #7a6a48; }
+
+/* пилюли/степперы внутри страниц */
+.stat-pill, .page-body .stat-pill { background: #ece0c2; color: #2c2417; }
+.count-stepper input, .page-body .count-stepper input { background: #fbf4e1; color: #2c2417; }
+.count-stepper button { background: #e0cda0; color: #2c2417; border-color: var(--border); }
+
+/* Эталон */
+.pg-tab { background: #ece0c2; border: 2px solid var(--gold-dk); color: #2c2417; }
+.pg-tab.sel { border-color: var(--gold); color: var(--gold-lt); }
+.pg-points { background: #f3ead2; border: 1px solid var(--gold-dk); color: var(--gold-lt); }
+.pg-node, .pg-cell, .pg-ability { background: #f3ead2; border: 1px solid var(--border); color: #2c2417; }
+.pg-rankbadge { background: #ece0c2; color: #2c2417; }
+.pg-xpbar { background: #d8cba6; }
+.pg-foot, .pg-locked-msg { color: #5a4e34; }
+.pg-bonus-head { color: #2c2417; }
+
+/* ресурсная зона */
+.rz-cell { background: radial-gradient(120% 90% at 50% 25%, #f3ead2 0%, #e3d4ad 100%); border: 1px solid var(--border); color: #2c2417; }
+.rz-cell.empty { background: repeating-linear-gradient(45deg, #ece0c2 0 6px, #f3ead2 6px 12px); }
+.rz-plus { color: #7a6a48; }
+.rz-lvl { background: #f3ead2; border: 1px solid var(--border); color: var(--gold-lt); }
+
+/* герой */
+.forge-slot { background: radial-gradient(120% 90% at 50% 25%, #f3ead2, #e3d4ad); color: #2c2417; }
+.forge-slot-name { color: #7a6a48; }
+.hero-hero { background: linear-gradient(90deg, color-mix(in srgb, var(--hc) 22%, #f6efda), #f6efda); border: 1px solid var(--border); }
+.hero-hero-portrait, .hero-card-portrait { background: radial-gradient(circle at 50% 35%, color-mix(in srgb, var(--hc) 45%, #f3ead2), #e3d4ad); }
+.advisor-text, .hero-card-blurb, .tc-tagline { color: #43381f; }
+.flip-face { background: linear-gradient(180deg, #f6efda, #ece0c2); }
+
+/* почта */
+.gm-list { background: #fbf4e1; border: 1px solid var(--border); }
+.gm-row { border-bottom: 1px solid #e1d3ad; }
+.gm-row:nth-child(even) { background: rgba(0,0,0,0.02); }
+.gm-row:hover { background: rgba(0,0,0,0.05); }
+.gm-row.unread { background: rgba(199,154,43,0.16); }
+.gm-row.unread .gm-from, .gm-row.unread .gm-msg { color: #2c2417; }
+.gm-star { color: #b0a079; }
+.gm-row.unread .gm-star { color: var(--gold); }
+.gm-from { color: #3a2f1a; }
+.gm-from.gm-blue { color: #2c5a9e; } .gm-from.gm-red { color: #b3382f; }
+.gm-from.gm-green { color: #2f7d3a; } .gm-from.gm-gold { color: var(--gold-lt); } .gm-from.gm-slate { color: #5a4e34; }
+.gm-msg { color: #6b5f44; }
+.gm-time { color: #8a7c5a; }
+
+/* донесения (армия) */
+.rep-row { background: #fbf4e1; border: 1px solid var(--border); border-left-width: 3px; }
+.rep-text { color: #3a2f1a; }
+.rep-time { color: #7a6a48; }
+.garrison-cell { background: #ece0c2; border: 1px solid var(--border); }
+
+/* ВКЛАДКИ: без заливки, чуть темнее фона, тёмная обводка */
+.hero-tab, .ac-era {
+  background: #e3d4ad; border: 1px solid #6e5a30; color: #2c2417;
+  text-shadow: none; box-shadow: none;
+}
+.hero-tab:hover, .ac-era:hover { border-color: #4a3a1c; background: #dcca9c; }
+.hero-tab.sel, .ac-era.sel { background: #d0b878; border-color: #4a3a1c; color: #2a1f08; font-weight: 800; }
+.page-body .hero-tab { color: #2c2417; }
+.page-body .hero-tab.sel { color: #2a1f08; }
+
+/* бой — светлый */
+.battle-screen { background: radial-gradient(900px 400px at 50% -120px, #f3ead2 0%, transparent 70%), linear-gradient(180deg, #e8dcbe, #ddcfb0); color: #2c2417; }
+.bs-target { color: #2c2417; } .bs-load, .bs-lock { color: #7a6a48; } .bs-load b { color: #2c2417; }
+.bs-form, .bs-unit { background: #f6efda; border: 1px solid var(--border); color: #2c2417; }
+.bs-form.sel, .bs-unit.sel { border-color: var(--gold); color: var(--gold-lt); }
+.bs-grid { background: linear-gradient(180deg, #efe3c4, #e6d8b6); border: 1px solid var(--border); }
+.bs-slot { background: #f3ead2; border: 1px dashed #b59f70; }
+.bs-slot.filled { background: #efe0b8; border-color: var(--gold-dk); }
+.bs-slot-label { color: #7a6a48; } .bs-slot-empty { color: #c2a978; }
+.bs-slot-ctrl button { background: #e0cda0; color: #2c2417; border: 1px solid var(--border); }
+.bs-tabs button { background: #ece0c2; border: 1px solid var(--border); color: #5a4e34; }
+.bs-tabs button.sel { color: var(--gold-lt); border-color: var(--gold); }
+.bs-unit-rank { color: var(--gold-lt); }
+
+/* карта/хроника/доки — оставляем тёмными (часть «мира», как было) */
+.map-viewport { background: #0e1a12; }
+.map-hint { background: rgba(13,19,32,0.6); color: #8d99ab; }
+.map-toppanel { background: linear-gradient(180deg, rgba(58,40,20,0.95), rgba(28,18,8,0.95)); border: 2px solid #b8923a; }
+.chronicle2 { background: linear-gradient(0deg, #120b04, #241708ee); border-top: 2px solid #b8923a; }
+.chronicle2 .announce .clabel { color: #6fb6ff; } .chronicle2 .events .clabel { color: #ff8a6a; }
+.chronicle2 .announce .cmar { color: #aacdf5; } .chronicle2 .events .cmar { color: #f0b6a6; }
+.shield-dock, .to-map-btn { background: linear-gradient(180deg, #4a3219, #241708); border: 2px solid #b8923a; color: #f6e2a0; }
+.shield-dock-txt { color: #f6e2a0; }
+
+/* ============ АКАДЕМИЯ: древо квадратов ============ */
+.ac-eras { display: grid; grid-template-columns: repeat(5, 1fr); gap: 6px; margin-bottom: 8px; }
+.ac-era { display: flex; flex-direction: column; align-items: center; gap: 1px; border-radius: 8px; padding: 6px 2px; cursor: pointer; font-family: inherit; }
+.ac-era .ac-era-rom { font-family: var(--serif); font-size: 17px; font-weight: 800; }
+.ac-era .ac-era-name { font-size: 10px; }
+.ac-era.locked { opacity: 0.5; }
+.ac-lore { font-size: 12px; font-style: italic; color: #5a4e34; margin: 8px 0 10px; text-align: center; }
+.ac-cols-head { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; margin-bottom: 8px; }
+.ac-col-head { text-align: center; font-size: 12px; font-weight: 800; color: var(--bc, var(--gold-dk)); border-bottom: 2px solid var(--bc, var(--border)); padding-bottom: 4px; }
+.ac-tree { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; }
+.ac-col { position: relative; display: flex; flex-direction: column; align-items: center; gap: 10px; padding: 4px 0; }
+.ac-col::before { content: ''; position: absolute; top: 6px; bottom: 6px; left: 50%; width: 2px; transform: translateX(-50%); background: rgba(0,0,0,0.12); z-index: 0; }
+.ac-sq {
+  position: relative; z-index: 1; width: 100%; max-width: 104px; aspect-ratio: 1 / 1;
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px;
+  background: #f6efda; border: 2px solid var(--border); border-radius: 10px;
+  cursor: pointer; font-family: inherit; color: #2c2417; transition: all 0.12s;
+}
+.ac-sq:hover:not(:disabled) { border-color: var(--bc, var(--gold-dk)); }
+.ac-sq.buyable { border-color: var(--bc, var(--gold)); box-shadow: 0 0 0 2px var(--bc, var(--gold)) inset; }
+.ac-sq.maxed { background: #efe0b0; border-color: var(--gold); }
+.ac-sq.locked { opacity: 0.5; cursor: not-allowed; }
+.ac-sq:disabled { cursor: not-allowed; }
+.ac-sq-ic { font-size: 22px; line-height: 1; }
+.ac-sq-val { font-size: 10px; font-weight: 700; color: var(--green); }
+.ac-sq-rank { display: flex; gap: 3px; }
+.ac-sq .ac-pip { width: 8px; height: 8px; border-radius: 2px; background: #ddcca3; border: 1px solid var(--border); }
+.ac-sq .ac-pip.on { background: var(--gold); border-color: var(--gold-dk); }
+
+/* ============ ДОФИКСЫ СВЕТЛОЙ ТЕМЫ ============ */
+/* вход (email/пароль) */
+.auth-input { background: #fbf4e1; border: 1px solid var(--border); color: #2c2417; }
+.auth-input::placeholder { color: #9b8a63; }
+.auth-input:focus { border-color: var(--gold); }
+
+/* почта: панель «Входящие» */
+.gm-toolbar { background: linear-gradient(180deg, #f3ead2, #e6d8b6); border: 1px solid var(--gold-dk); }
+.gm-tb-title { color: var(--gold-lt); }
+.gm-tb-count { color: #8a7c5a; }
+
+/* профиль: светлые карточки/таблички/вкладки */
+.prof-card { background: linear-gradient(180deg, #fbf4e1, #efe3c4); border: 2px solid var(--brass); }
+.prof-pic { background: radial-gradient(circle at 40% 30%, #f0e2bf, #d8c290); box-shadow: 0 0 0 3px var(--gold-lt), 0 0 0 6px var(--gold-dk); }
+.prof-role { color: var(--gold-lt); }
+.prof-plaque { background: linear-gradient(180deg, #f3ead2, #e6d8b6); border: 1px solid var(--gold-dk); }
+.prof-plaque span { color: #7a6a48; }
+.prof-plaque b { color: var(--gold-lt); }
+.prof-tabs button { background: #ece0c2; border: 2px solid var(--gold-dk); color: #2c2417; }
+.prof-tabs button.sel { border-color: var(--gold); color: var(--gold-lt); }
+
+/* ============ ГЕРОЙ: «бумажная кукла» (5 слотов слева + 5 справа) ============ */
+.paperdoll {
+  display: grid; grid-template-columns: 1fr 1.1fr 1fr; gap: 8px; align-items: stretch;
+  margin-bottom: 8px;
+}
+.pd-col { display: flex; flex-direction: column; gap: 8px; }
+.pd-slot {
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px;
+  min-height: 64px; padding: 6px 4px; cursor: pointer; font-family: inherit;
+  background: #f3ead2; border: 2px solid var(--border); border-radius: 10px; color: #2c2417;
+  transition: border-color 0.12s, box-shadow 0.12s;
+}
+.pd-slot.filled { border-color: var(--rc, var(--gold-dk)); box-shadow: 0 0 0 1px var(--rc, var(--gold-dk)) inset; }
+.pd-slot.sel { box-shadow: 0 0 0 2px var(--gold) inset; }
+.pd-slot-ic { font-size: 24px; line-height: 1; }
+.pd-slot-name { font-size: 10px; color: #7a6a48; text-align: center; line-height: 1.15; }
+.pd-slot.filled .pd-slot-name { color: #2c2417; font-weight: 600; }
+.pd-hero {
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px;
+  border-radius: 12px; padding: 10px 6px;
+  background: linear-gradient(180deg, color-mix(in srgb, var(--hc) 22%, #f6efda), #efe3c4);
+  border: 2px solid var(--brass);
+}
+.pd-hero-fig {
+  width: 84px; height: 84px; border-radius: 50%;
+  display: flex; align-items: center; justify-content: center; font-size: 46px;
+  background: radial-gradient(circle at 50% 35%, color-mix(in srgb, var(--hc) 45%, #f3ead2), #e3d4ad);
+  border: 3px solid var(--hc);
+}
+.pd-hero-name { font-family: var(--serif); font-weight: 800; color: #3a2f1a; }
+.pd-hero-lvl { font-size: 12px; color: var(--gold-lt); font-weight: 700; }
+
+/* ============ Экран боя: комплекты и план атаки ============ */
+.bs-presets { display: flex; gap: 6px; flex-wrap: wrap; }
+.bs-preset {
+  flex: 1; min-width: 120px; display: flex; flex-direction: column; align-items: center; gap: 1px;
+  background: #e3d4ad; border: 1px solid #6e5a30; border-radius: 9px;
+  padding: 7px 6px; font-size: 12.5px; font-weight: 700; color: #2c2417; cursor: pointer; font-family: inherit;
+}
+.bs-preset:hover { border-color: #4a3a1c; }
+.bs-preset.sel { background: #d0b878; border-color: #4a3a1c; }
+.bs-preset.locked { opacity: 0.8; }
+.bs-preset-cost { font-size: 10px; color: #8a3a2a; font-weight: 700; }
+
+.bs-planrow { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.bs-plans { display: flex; align-items: center; gap: 5px; flex-wrap: wrap; flex: 1; }
+.bs-plan {
+  background: #ece0c2; border: 1px solid var(--border); border-radius: 8px;
+  padding: 5px 9px; font-size: 11.5px; font-weight: 600; color: #2c2417; cursor: pointer; font-family: inherit;
+}
+.bs-plan:disabled { opacity: 0.45; cursor: not-allowed; }
+.bs-plan.sel { background: #d0b878; border-color: var(--gold-dk); color: #2a1f08; }

@@ -1,9 +1,10 @@
 import { create } from 'zustand';
 import {
-  ALLIES, BLESSINGS, BLESSING_DURATION_H, BOT_ACT_MAX_M, BOT_ACT_MIN_M, BOT_SEEDS,
+  ALLIES, BATTLE_PRESETS, BLESSINGS, BLESSING_DURATION_H, BOT_ACT_MAX_M, BOT_ACT_MIN_M, BOT_SEEDS,
   BUILDINGS, CAMP_SEEDS, DAILY_QUESTS, EMBASSY_COOLDOWN_H, EMBASSY_HELP_MIN_PER_LVL,
   FACTIONS, FACTION_CHANGE_COST, FREE_SHIELD_COOLDOWN_H, ITEM_DEFS, LOTTERY_PRIZES,
   PLAYER_POS, PLAYER_RAID_SAFE_POWER, RECON_COST_SILVER, RECON_MAX_S, RECON_MIN_S, RESEARCH,
+  RESOURCE_BUILDING_IDS, RESOURCE_ZONE_SIZE,
   SHIELDS, SPEEDUP_GOLD_PER_MIN, SPY_COST_SILVER, SPY_MIN_S, START_INVENTORY, START_RESOURCES,
   TELEPORT_COST_GOLD, TEMPLE_COOLDOWN_H,
 } from './config';
@@ -18,9 +19,23 @@ import {
   PARAGON_ABILITIES, PARAGON_CASTLE_REQ, availablePoints, nodeCost, nodeUnlocked,
   paragonMultipliers, paragonNode,
 } from './paragon';
+import {
+  EXPEDITION_CASTLE_REQ, HERO_ENERGY_BASE, HERO_RESET_COST_GOLD, HEROES,
+  activeHero, emptyEquipment, expeditionDef, freshHeroSystem, heroAvailablePoints,
+  heroBuffs, heroEnergyMax, heroLevelInfo, heroNodeCost, heroNodeUnlocked, heroTalentNode,
+  settleHeroEnergy, slotAccepts,
+} from './hero';
+import {
+  MAX_BARB_LEVEL, barbXpForCamp, generateGear, randomGearSlot, rollCampLoot, unlockedBarbLevel,
+} from './barbarians';
+import {
+  ACADEMY_NODE_MAX, academyAvailablePoints, academyBuffs, academyNode,
+  academyNodeUnlocked, eraMarchFactor, eraResearchable,
+} from './academy';
 import type {
-  BattleReport, Bot, BuildingId, Camp, EnemySnapshot, FactionId, GameState, LogEntry,
-  MarchTask, ResearchId, Resource, Resources, ScoutKind, TargetKind,
+  BattleLayout, BattleReport, Bot, BuildingId, Camp, EnemySnapshot, EquipSlot, FactionId, GameState,
+  HeroId, HeroInstance, HeroSystemData, LogEntry, MarchTask, ResearchId, Resource, ResourceBuildingId,
+  ResourcePlot, Resources, ScoutKind, TargetKind,
 } from './types';
 
 const SAVE_KEY = 'march-of-empires-save-v1';
@@ -42,7 +57,21 @@ interface Actions {
   tick: (now: number) => void;
   startGame: (faction: FactionId, name: string) => void;
   startUpgrade: (b: BuildingId) => void;
+  buildPlot: (plotIndex: number, type: ResourceBuildingId) => void;
+  upgradePlot: (plotIndex: number) => void;
+  advanceTutorial: () => void;
+  // ---- Герой (Champion System) ----
+  chooseInitialHero: (id: HeroId) => void;
+  swapHero: (id: HeroId) => void;
+  unlockHero: (id: HeroId) => void;
+  allocateHeroTalent: (nodeId: string) => void;
+  resetHeroTalents: () => void;
+  equipHeroGear: (slot: EquipSlot, gearId: string) => void;
+  unequipHeroGear: (slot: EquipSlot) => void;
+  startExpedition: (expId: string) => void;
   startResearch: (r: ResearchId) => void;
+  researchAcademy: (nodeId: string) => void;
+  resetAcademy: () => void;
   trainUnits: (unitId: string, count: number) => void;
   speedUp: (queue: 'build' | 'research' | 'train', id: string) => void;
   activateShield: (shieldId: string) => void;
@@ -54,12 +83,15 @@ interface Actions {
   claimQuest: (questId: string) => void;
   changeFaction: (f: FactionId) => void;
   dismissReport: () => void;
+  clearReports: () => void;
   spendParagon: (nodeId: string) => void;
   resetParagon: () => void;
   useParagonAbility: (abilityId: string) => void;
   useItem: (itemId: string) => void;
   claimLottery: () => void;
   markMailSeen: () => void;
+  buyBattlePreset: (id: string) => void;
+  saveBattleLayout: (id: string, layout: BattleLayout) => void;
   // онлайн
   sendPlayerAttack: (enemy: EnemySnapshot, units: Record<string, number>, formationId: string) => void;
   applyEnemyAttack: (loot: Partial<Resources>, troopLoss: number, report: string) => void;
@@ -89,6 +121,30 @@ function makeCamps(): Camp[] {
   return CAMP_SEEDS.map((seed) => ({ ...seed, damagedAt: 0, damageFraction: 0 }));
 }
 
+/** Сгенерировать свежий набор лагерей варваров со спредом уровней (для обновления каждые 10 мин). */
+function refreshCamps(maxLevel: number): Camp[] {
+  const cap = Math.max(1, Math.min(MAX_BARB_LEVEL, maxLevel));
+  const n = 6;
+  const camps: Camp[] = [];
+  for (let i = 0; i < n; i++) {
+    let level: number;
+    if (i === 0) level = 1;
+    else if (i === n - 1) level = cap;
+    else level = 1 + Math.floor(Math.random() * cap);
+    level = Math.max(1, Math.min(MAX_BARB_LEVEL, level));
+    camps.push({
+      id: `camp_${uid()}`,
+      level,
+      basePower: Math.round(150 * Math.pow(level, 1.7)),
+      x: 300 + Math.round(Math.random() * 1600),
+      y: 300 + Math.round(Math.random() * 900),
+      damagedAt: 0,
+      damageFraction: 0,
+    });
+  }
+  return camps;
+}
+
 export function campName(level: number): string {
   return `Лагерь варваров ур. ${level}`;
 }
@@ -102,6 +158,54 @@ function findTarget(s: GameState, id: string): { kind: TargetKind; bot?: Bot; ca
   return null;
 }
 
+/** Пустая ресурсная зона: ровно RESOURCE_ZONE_SIZE свободных участков. */
+export function emptyResourceZone(): ResourcePlot[] {
+  return Array.from({ length: RESOURCE_ZONE_SIZE }, () => ({ type: null, level: 0 }));
+}
+
+/** Миграция старого сейва: переносим прежние ресурсные здания на участки зоны. */
+function zoneFromLegacy(buildings?: Partial<Record<BuildingId, number>>): ResourcePlot[] {
+  const zone = emptyResourceZone();
+  if (!buildings) return zone;
+  let i = 0;
+  for (const id of RESOURCE_BUILDING_IDS) {
+    const lvl = buildings[id] ?? 0;
+    if (lvl > 0 && i < zone.length) zone[i++] = { type: id, level: lvl };
+  }
+  return zone;
+}
+
+/**
+ * Миграция системы героев. Поддерживает:
+ *  - новые сейвы (parsed.heroSystem) — берём как есть;
+ *  - сейвы предыдущей версии (parsed.hero — одиночный активный герой) — оборачиваем в коллекцию;
+ *  - отсутствие данных — пустая система (выбор ещё не сделан).
+ */
+function migrateHeroSystem(parsed: Record<string, unknown>, now: number): HeroSystemData {
+  // Снаряжение переведено на новую модель (10 слотов, предметы-экземпляры).
+  // Чтобы не тащить несовместимый старый инвентарь — начинаем экипировку с нуля.
+  const hs = parsed.heroSystem as HeroSystemData | undefined;
+  if (hs && hs.heroes) {
+    for (const id of Object.keys(hs.heroes)) {
+      const h = hs.heroes[id] as HeroInstance;
+      h.equipment = emptyEquipment();
+    }
+    hs.gearInventory = {};
+    return hs;
+  }
+  const old = parsed.hero as Partial<HeroInstance> | null | undefined;
+  if (old && old.id) {
+    const inst: HeroInstance = {
+      id: old.id, exp: old.exp ?? 0, level: old.level ?? 1,
+      talents: old.talents ?? {}, equipment: emptyEquipment(),
+      energy: old.energy ?? HERO_ENERGY_BASE, energyAt: old.energyAt ?? now,
+      expedition: old.expedition ?? null,
+    };
+    return { selected: true, activeId: old.id, heroes: { [old.id]: inst }, gearInventory: {} };
+  }
+  return freshHeroSystem();
+}
+
 export function freshState(now: number): GameState {
   return {
     started: false,
@@ -109,10 +213,18 @@ export function freshState(now: number): GameState {
     faction: 'highland',
     resources: { ...START_RESOURCES },
     buildings: {
-      castle: 1, farm: 1, ironMine: 1, lumberMill: 1, silverMine: 1,
+      castle: 1, farm: 0, ironMine: 0, lumberMill: 0, silverMine: 0,
       barracks: 1, academy: 0, temple: 0, tavern: 0, embassy: 0,
     },
+    resourceZone: emptyResourceZone(),
+    onboarded: false,
+    tutorialStep: null,
     research: { economy: 0, construction: 0, attack: 0, defense: 0 },
+    academy: {},
+    barbXp: 0,
+    nextCampRefreshAt: now + 10 * 60_000,
+    battlePresets: ['default'],
+    battleLayouts: {},
     army: {},
     buildQueue: [],
     researchQueue: [],
@@ -142,6 +254,7 @@ export function freshState(now: number): GameState {
       scoutsSent: 0, lootedResources: 0, raidsSuffered: 0,
     },
     paragon: { xp: 0, nodes: {}, abilities: {} },
+    heroSystem: freshHeroSystem(),
     inventory: { ...START_INVENTORY },
     lotteryDate: '',
     mailSeen: now,
@@ -156,6 +269,8 @@ function loadState(): GameState {
     if (raw) {
       const parsed = JSON.parse(raw) as Partial<GameState>;
       const fresh = freshState(now);
+      // Ресурсная зона: новые сейвы — как есть; старые — переносим прежние здания на участки.
+      const zone = parsed.resourceZone ?? zoneFromLegacy(parsed.buildings);
       // Аккуратный мердж: новые поля берём из fresh, если их нет в старом сейве
       return {
         ...fresh,
@@ -172,6 +287,17 @@ function loadState(): GameState {
         lotteryDate: parsed.lotteryDate ?? '',
         mailSeen: parsed.mailSeen ?? fresh.mailSeen,
         onlinePlaced: parsed.onlinePlaced ?? false,
+        resourceZone: zone,
+        // Туториал уже пройден всеми, у кого был старый сейв (нет поля resourceZone).
+        onboarded: parsed.onboarded ?? (parsed.resourceZone ? false : true),
+        tutorialStep: parsed.tutorialStep ?? null,
+        // Система героев: доступна сразу; выбор стартового героя — при первом открытии меню.
+        heroSystem: migrateHeroSystem(parsed as Record<string, unknown>, now),
+        academy: parsed.academy ?? {},
+        barbXp: parsed.barbXp ?? 0,
+        nextCampRefreshAt: parsed.nextCampRefreshAt ?? (now + 10 * 60_000),
+        battlePresets: parsed.battlePresets ?? ['default'],
+        battleLayouts: parsed.battleLayouts ?? {},
       } as GameState;
     }
   } catch (e) {
@@ -189,8 +315,8 @@ function persist(s: GameState, force = false) {
   localStorage.setItem(SAVE_KEY, JSON.stringify(data));
 }
 
-function pushLog(s: GameState, icon: string, text: string, kind: LogEntry['kind'], at = Date.now()) {
-  s.log = [{ id: uid(), at, icon, text, kind }, ...s.log].slice(0, 30);
+function pushLog(s: GameState, icon: string, text: string, kind: LogEntry['kind'], at = Date.now(), side?: LogEntry['side']) {
+  s.log = [{ id: uid(), at, icon, text, kind, ...(side ? { side } : {}) }, ...s.log].slice(0, 40);
 }
 
 /** Хроника королевства — события мира ботов (бегущая строка на карте). */
@@ -204,6 +330,29 @@ function addQuestProgress(s: GameState, questId: string, amount = 1) {
 
 function addParagon(s: GameState, n: number) {
   s.paragon.xp += n;
+}
+
+/** Начисление опыта активному герою + синхронизация кэша уровня. Логирует левел-апы. */
+function addHeroExp(s: GameState, n: number) {
+  const h = activeHero(s);
+  if (!h || n <= 0) return;
+  const before = heroLevelInfo(h.exp).level;
+  h.exp += n;
+  const after = heroLevelInfo(h.exp).level;
+  h.level = after;
+  if (after > before) {
+    pushLog(s, '⭐', `${HEROES[h.id].name} достигает ${after} уровня! +${after - before} очк. талантов`, 'info');
+  }
+}
+
+/** Разблокировать героя в коллекцию (для наград/событий/dev). Возвращает true, если новый. */
+function unlockHeroInternal(s: GameState, id: HeroId, now: number): boolean {
+  if (s.heroSystem.heroes[id]) return false;
+  s.heroSystem.heroes[id] = {
+    id, exp: 0, level: 1, talents: {}, equipment: emptyEquipment(),
+    energy: HERO_ENERGY_BASE, energyAt: now, expedition: null,
+  };
+  return true;
 }
 
 // ---------- Доход ресурсов и еда (БЕЗ дезертирства) ----------
@@ -230,11 +379,50 @@ function completeQueues(s: GameState, now: number, offline: boolean): BattleRepo
   // Стройки
   for (const t of [...s.buildQueue]) {
     if (t.endsAt <= now) {
-      s.buildings[t.building] = Math.max(s.buildings[t.building] ?? 0, t.targetLevel);
+      if (t.plot !== undefined && s.resourceZone[t.plot]) {
+        s.resourceZone[t.plot] = { type: t.building as ResourceBuildingId, level: t.targetLevel };
+      } else {
+        s.buildings[t.building] = Math.max(s.buildings[t.building] ?? 0, t.targetLevel);
+      }
       s.buildQueue = s.buildQueue.filter((x) => x.id !== t.id);
       addParagon(s, 25 + t.targetLevel * 5);
-      pushLog(s, '🏗️', `${BUILDINGS[t.building].name} достроен до ур. ${t.targetLevel}`, 'build');
+      pushLog(s, '🏗️', `${BUILDINGS[t.building].name} — готово (ур. ${t.targetLevel})`, 'build');
     }
+  }
+
+  // Завершение походов героев (Sovereign Journeys) — по всей коллекции.
+  for (const hero of Object.values(s.heroSystem.heroes)) {
+    if (!hero.expedition || hero.expedition.endsAt > now) continue;
+    const def = expeditionDef(hero.expedition.id);
+    hero.expedition = null;
+    if (!def) continue;
+    const r = def.rewards;
+    // опыт получает именно вернувшийся герой
+    const before = heroLevelInfo(hero.exp).level;
+    hero.exp += r.exp;
+    hero.level = heroLevelInfo(hero.exp).level;
+    if (hero.level > before) pushLog(s, '⭐', `${HEROES[hero.id].name}: уровень ${hero.level}!`, 'info');
+    if (r.gold) s.resources.gold += r.gold;
+    if (r.iron) s.resources.iron += r.iron;
+    if (r.wood) s.resources.wood += r.wood;
+    if (r.silver) s.resources.silver += r.silver;
+    if (r.food) s.resources.food += r.food;
+    let extra = '';
+    if (r.gearRarity && Math.random() < (r.gearChance ?? 0)) {
+      const gear = generateGear(randomGearSlot(), r.gearRarity, Math.max(1, r.gearLevel ?? 1));
+      s.heroSystem.gearInventory[gear.id] = gear;
+      extra += ` Трофей: ${gear.name}!`;
+    }
+    // шанс завербовать нового героя в коллекцию
+    if (r.recruit && Math.random() < (r.recruitChance ?? 0)) {
+      const locked = (Object.keys(HEROES) as HeroId[]).filter((id) => !s.heroSystem.heroes[id]);
+      if (locked.length) {
+        const id = locked[Math.floor(Math.random() * locked.length)];
+        unlockHeroInternal(s, id, now);
+        extra += ` К тебе примкнул новый герой: ${HEROES[id].name}!`;
+      }
+    }
+    pushLog(s, def.icon, `Поход «${def.name}» завершён. +${r.exp} опыта.${extra}`, 'gold');
   }
   // Исследования
   for (const t of [...s.researchQueue]) {
@@ -307,7 +495,7 @@ function resolveBattle(
   const def = effectivePower(obj, at) * (0.92 + Math.random() * 0.16);
   const win = atk > def;
 
-  const formLossCut = (FORMATIONS.find((f) => f.id === formationId)?.lossReduction ?? 0) + paragonMultipliers(s).lossReduction;
+  const formLossCut = (FORMATIONS.find((f) => f.id === formationId)?.lossReduction ?? 0) + paragonMultipliers(s).lossReduction + academyBuffs(s).lossCut;
   const lossFrac = (win
     ? Math.min(0.6, 0.08 + 0.35 * (def / Math.max(atk, 1)))
     : 0.45 + Math.random() * 0.25) * Math.max(0.2, 1 - formLossCut);
@@ -326,20 +514,33 @@ function resolveBattle(
 
   const loot: Partial<Resources> = {};
   if (win) {
-    // Лагеря варваров дают заметно больше золота за уровень, чем замки ботов
-    const goldLoot = isCamp
-      ? Math.round((20 + level * 26) * (0.85 + Math.random() * 0.3))
-      : Math.round((12 + level * 9) * (0.8 + Math.random() * 0.4));
-    const resMult = isCamp ? 95 : 70;
-    const lootBonus = 1 + paragonMultipliers(s).loot;
-    loot.gold = Math.round(goldLoot * lootBonus);
-    loot.iron = Math.round(resMult * level * (0.7 + Math.random() * 0.6) * lootBonus);
-    loot.wood = Math.round(resMult * level * (0.7 + Math.random() * 0.6) * lootBonus);
-    loot.silver = Math.round((resMult - 20) * level * (0.7 + Math.random() * 0.6) * lootBonus);
-    loot.food = Math.round((resMult - 15) * level * (0.7 + Math.random() * 0.6) * lootBonus);
-    for (const [r, v] of Object.entries(loot)) s.resources[r as Resource] += v as number;
-    s.stats.killedTroops += Math.round(def / 24);
-    s.stats.lootedResources += (loot.iron ?? 0) + (loot.wood ?? 0) + (loot.silver ?? 0) + (loot.food ?? 0);
+    const kills = Math.round(def / 24);
+    s.stats.killedTroops += kills;
+    addHeroExp(s, kills * (1 + level)); // опыт чемпиона — за каждого убитого бойца
+    const lootBonus = 1 + paragonMultipliers(s).loot + academyBuffs(s).loot;
+
+    if (isCamp) {
+      // Таблица лута лагеря: одна из наград (золото / предмет / сундук / редкое)
+      const drop = rollCampLoot(level);
+      if (drop.gold) { const g = Math.round(drop.gold * lootBonus); loot.gold = g; s.resources.gold += g; }
+      if (drop.gear) s.heroSystem.gearInventory[drop.gear.id] = drop.gear;
+      // Опыт Варваров → открывает лагеря выше уровнем
+      const beforeLvl = unlockedBarbLevel(s.barbXp);
+      s.barbXp += barbXpForCamp(level);
+      const afterLvl = unlockedBarbLevel(s.barbXp);
+      pushLog(s, '🔥', `Лагерь варваров ур. ${level} разорён. ${drop.log}`, 'battle');
+      if (afterLvl > beforeLvl) pushLog(s, '⚔️', `Открыт Уровень Варваров ${afterLvl}! Доступны лагеря посильнее.`, 'info');
+    } else {
+      const resMult = 70;
+      loot.gold = Math.round((12 + level * 9) * (0.8 + Math.random() * 0.4) * lootBonus);
+      loot.iron = Math.round(resMult * level * (0.7 + Math.random() * 0.6) * lootBonus);
+      loot.wood = Math.round(resMult * level * (0.7 + Math.random() * 0.6) * lootBonus);
+      loot.silver = Math.round((resMult - 20) * level * (0.7 + Math.random() * 0.6) * lootBonus);
+      loot.food = Math.round((resMult - 15) * level * (0.7 + Math.random() * 0.6) * lootBonus);
+      for (const [r, v] of Object.entries(loot)) s.resources[r as Resource] += v as number;
+      s.stats.lootedResources += (loot.iron ?? 0) + (loot.wood ?? 0) + (loot.silver ?? 0) + (loot.food ?? 0);
+      pushLog(s, '⚔️', `Победа над ${enemyName}! Трофеи: ${loot.gold} золота`, 'battle');
+    }
 
     obj.damageFraction = Math.min(0.85, damageNow(obj, at, isCamp) + 0.5);
     obj.damagedAt = at;
@@ -348,7 +549,6 @@ function resolveBattle(
     s.stats.wins += 1;
     addQuestProgress(s, 'win');
     addParagon(s, isCamp ? 40 : 60);
-    pushLog(s, isCamp ? '🔥' : '⚔️', `Победа над ${enemyName}! Трофеи: ${loot.gold} золота`, 'battle');
   } else {
     obj.damageFraction = Math.min(0.85, damageNow(obj, at, isCamp) + 0.12);
     obj.damagedAt = at;
@@ -367,7 +567,7 @@ function resolvePlayerBattle(
   const def = Math.max(50, enemy.power) * (0.92 + Math.random() * 0.16);
   const win = atk > def;
 
-  const formLossCut = (FORMATIONS.find((f) => f.id === formationId)?.lossReduction ?? 0) + paragonMultipliers(s).lossReduction;
+  const formLossCut = (FORMATIONS.find((f) => f.id === formationId)?.lossReduction ?? 0) + paragonMultipliers(s).lossReduction + academyBuffs(s).lossCut;
   const lossFrac = (win
     ? Math.min(0.6, 0.08 + 0.35 * (def / Math.max(atk, 1)))
     : 0.45 + Math.random() * 0.25) * Math.max(0.2, 1 - formLossCut);
@@ -387,14 +587,16 @@ function resolvePlayerBattle(
   const loot: Partial<Resources> = {};
   if (win) {
     const lvl = Math.max(1, Math.round(enemy.power / 400));
-    const lootBonus = 1 + paragonMultipliers(s).loot;
+    const lootBonus = 1 + paragonMultipliers(s).loot + academyBuffs(s).loot;
     loot.gold = Math.round((10 + lvl * 8) * lootBonus);
     loot.iron = Math.round(120 * lvl * (0.7 + Math.random() * 0.6) * lootBonus);
     loot.wood = Math.round(120 * lvl * (0.7 + Math.random() * 0.6) * lootBonus);
     loot.silver = Math.round(90 * lvl * (0.7 + Math.random() * 0.6) * lootBonus);
     loot.food = Math.round(90 * lvl * (0.7 + Math.random() * 0.6) * lootBonus);
     for (const [r, v] of Object.entries(loot)) s.resources[r as Resource] += v as number;
-    s.stats.killedTroops += Math.round(def / 24);
+    const kills = Math.round(def / 24);
+    s.stats.killedTroops += kills;
+    addHeroExp(s, kills * (1 + lvl)); // опыт чемпиона за убитых бойцов
     s.stats.lootedResources += (loot.iron ?? 0) + (loot.wood ?? 0) + (loot.silver ?? 0) + (loot.food ?? 0);
     s.stats.wins += 1;
     addQuestProgress(s, 'win');
@@ -454,7 +656,7 @@ function completeScout(s: GameState, targetId: string, kind: ScoutKind, at: numb
     const detectChance = Math.min(0.6, 0.08 + level * 0.06);
     if (Math.random() < detectChance) {
       s.stats.lostSpies += 1;
-      pushLog(s, '🕵️', `Шпион в ${name} обнаружен! Доклад не получен.`, 'info', at);
+      pushLog(s, '🕵️', `Шпион в ${name} обнаружен! Доклад не получен.`, 'scout', at, 'own');
       return;
     }
     s.spyReports[targetId] = {
@@ -466,7 +668,7 @@ function completeScout(s: GameState, targetId: string, kind: ScoutKind, at: numb
       shielded: isCamp ? false : target.bot!.shieldUntil > at,
       defenseBonus: 10 + level * 5,
     };
-    pushLog(s, '🕵️', `Шпион вернулся из ${name}: точный доклад получен.`, 'info', at);
+    pushLog(s, '🕵️', `Шпион вернулся из ${name}: точный доклад получен.`, 'scout', at, 'own');
   } else {
     // Разведка: грубая оценка (±25%), округление
     const accuracy = 0.25;
@@ -477,7 +679,7 @@ function completeScout(s: GameState, targetId: string, kind: ScoutKind, at: numb
       composition: compositionCounts(realPower, comp),
       resources: roughResources(campOrBotLoot(level, isCamp)),
     };
-    pushLog(s, '🔭', `Разведка ${name}: сила ≈ ${est}.`, 'info', at);
+    pushLog(s, '🔭', `Разведка ${name}: сила ≈ ${est}.`, 'scout', at, 'own');
   }
 }
 
@@ -548,6 +750,20 @@ function botActStep(s: GameState, now: number) {
     }
   } else if (roll < 0.85) {
     pushChronicle(s, '🌾', `${attacker.name} фермит ресурсные точки`, now);
+  }
+
+  // 4) Чужой шпион изредка прощупывает замок игрока (для вкладки «Разведка», красным)
+  if (!s.started) return;
+  if (Math.random() < 0.14) {
+    const spy = s.bots[Math.floor(Math.random() * s.bots.length)];
+    const tavern = s.buildings.tavern ?? 0;
+    // Шанс поимки растёт от уровня Таверны (контрразведка)
+    const caught = Math.random() < Math.min(0.7, 0.2 + tavern * 0.08);
+    if (caught) {
+      pushLog(s, '🕵️', `Шпион лорда ${spy.name} пойман у твоих стен и казнён.`, 'scout', now, 'enemy');
+    } else {
+      pushLog(s, '🕵️', `Шпион лорда ${spy.name} разведал твой замок. Усиль Таверну.`, 'scout', now, 'enemy');
+    }
   }
 }
 
@@ -633,6 +849,15 @@ function runTick(s: GameState, now: number): BattleReport | null {
   }
   // Истёкшее благословение
   if (s.blessing && s.blessing.endsAt <= now) s.blessing = null;
+  // Обновление лагерей варваров каждые 10 минут (спред уровней под текущий прогресс)
+  if (!s.nextCampRefreshAt || now >= s.nextCampRefreshAt) {
+    // лагеря с летящими к ним войсками не удаляем (иначе потеряются армии)
+    const pinned = s.camps.filter((c) => s.marches.some((m) => m.targetId === c.id));
+    s.camps = [...pinned, ...refreshCamps(unlockedBarbLevel(s.barbXp) + 1)].slice(0, 8);
+    s.nextCampRefreshAt = now + 10 * 60_000;
+  }
+  // Реген энергии героя
+  settleHeroEnergy(s, now);
   s.lastTick = now;
   return report;
 }
@@ -666,6 +891,8 @@ export const useGame = create<Store>((set, get) => {
         s.started = true;
         s.faction = faction;
         s.playerName = name.trim() || 'Лорд';
+        s.onboarded = false;
+        s.tutorialStep = 'intro'; // запускаем стартовый онбординг ресурсной зоны
         pushLog(s, '👑', `Добро пожаловать, ${s.playerName}! Империя ${FACTIONS[faction].name} ждёт.`, 'info');
         set({ ...s, pendingReport: null });
         persist(s, true);
@@ -688,6 +915,145 @@ export const useGame = create<Store>((set, get) => {
         addQuestProgress(s, 'upgrade');
       }),
 
+      // Постройка нового ресурсного здания на пустом участке зоны (любой тип).
+      buildPlot: (plotIndex, type) => mutate((s) => {
+        const plot = s.resourceZone[plotIndex];
+        if (!plot || plot.type) return;                  // участок должен быть пуст
+        if (!RESOURCE_BUILDING_IDS.includes(type)) return;
+        if (s.buildQueue.length >= 1) return;            // 1 слот стройки
+        const def = BUILDINGS[type];
+        const cost = buildingCost(def, 1);
+        if (!canAfford(s.resources, cost)) return;
+        for (const [r, v] of Object.entries(cost)) s.resources[r as Resource] -= v as number;
+        const now = Date.now();
+        // Шаг 4 онбординга: первая постройка возводится мгновенно (0 секунд).
+        const tutorialBuild = !s.onboarded && s.tutorialStep === 'choose';
+        const dur = tutorialBuild ? 0 : buildingTimeMs(s, def, 1);
+        s.buildQueue.push({ id: uid(), building: type, plot: plotIndex, targetLevel: 1, startedAt: now, endsAt: now + dur });
+        addQuestProgress(s, 'upgrade');
+        if (tutorialBuild) {
+          completeQueues(s, now, false); // мгновенная достройка
+          s.tutorialStep = 'finish';     // переходим к финальной реплике советника
+        }
+      }),
+
+      // Улучшение уже стоящего на участке здания на +1 уровень (кап по Замку).
+      upgradePlot: (plotIndex) => mutate((s) => {
+        const plot = s.resourceZone[plotIndex];
+        if (!plot || !plot.type) return;
+        const def = BUILDINGS[plot.type];
+        const target = plot.level + 1;
+        if (target > def.maxLevel) return;
+        if (target > (s.buildings.castle ?? 1)) return;  // кап по Замку
+        if (s.buildQueue.length >= 1) return;
+        const cost = buildingCost(def, target);
+        if (!canAfford(s.resources, cost)) return;
+        for (const [r, v] of Object.entries(cost)) s.resources[r as Resource] -= v as number;
+        const now = Date.now();
+        const dur = buildingTimeMs(s, def, target);
+        s.buildQueue.push({ id: uid(), building: plot.type, plot: plotIndex, targetLevel: target, startedAt: now, endsAt: now + dur });
+        addQuestProgress(s, 'upgrade');
+      }),
+
+      // Переход между шагами стартового онбординга.
+      advanceTutorial: () => mutate((s) => {
+        if (s.tutorialStep === 'intro') s.tutorialStep = 'choose';
+        else if (s.tutorialStep === 'finish') { s.tutorialStep = null; s.onboarded = true; }
+      }),
+
+      // ---------- Герой (Champion System) ----------
+      // Стартовый выбор героя (при первом открытии меню). Выбор фиксируется,
+      // выбранный герой становится активным и единственным разблокированным.
+      chooseInitialHero: (id) => mutate((s) => {
+        if (s.heroSystem.selected || !HEROES[id]) return; // выбор уже сделан — блокировка
+        const now = Date.now();
+        unlockHeroInternal(s, id, now);
+        s.heroSystem.activeId = id;
+        s.heroSystem.selected = true;
+        // Снаряжения в начале нет — игрок выбивает его в боях с варварами.
+        pushLog(s, HEROES[id].icon, `Герой избран: ${HEROES[id].name} — ${HEROES[id].title}.`, 'info');
+      }),
+
+      // Сделать активным другого РАЗБЛОКИРОВАННОГО героя за «Печать смены героя».
+      swapHero: (id) => mutate((s) => {
+        if (!HEROES[id] || id === s.heroSystem.activeId) return;
+        if (!s.heroSystem.heroes[id]) return;            // герой должен быть в коллекции
+        if ((s.inventory.heroSwapToken ?? 0) <= 0) return;
+        s.inventory.heroSwapToken -= 1;
+        s.heroSystem.activeId = id;
+        pushLog(s, '🔁', `Активный герой сменён: ${HEROES[id].name}.`, 'info');
+      }),
+
+      // Разблокировать героя в коллекцию (награды/события).
+      unlockHero: (id) => mutate((s) => {
+        if (!HEROES[id]) return;
+        if (unlockHeroInternal(s, id, Date.now())) {
+          pushLog(s, '⭐', `Новый герой в коллекции: ${HEROES[id].name}!`, 'info');
+        }
+      }),
+
+      // Вложить очко таланта активному герою (кап по очкам, последовательное открытие).
+      allocateHeroTalent: (nodeId) => mutate((s) => {
+        const h = activeHero(s);
+        if (!h) return;
+        const node = heroTalentNode(nodeId);
+        if (!node) return;
+        const cur = h.talents[nodeId] ?? 0;
+        if (cur >= node.maxLevel) return;
+        if (!heroNodeUnlocked(node, h.talents)) return;
+        const cost = heroNodeCost(node, cur);
+        if (heroAvailablePoints(h) < cost) return;
+        h.talents[nodeId] = cur + 1;
+      }),
+
+      // Сброс талантов активного героя за золото (очки возвращаются).
+      resetHeroTalents: () => mutate((s) => {
+        const h = activeHero(s);
+        if (!h || Object.keys(h.talents).length === 0) return;
+        if (s.resources.gold < HERO_RESET_COST_GOLD) return;
+        s.resources.gold -= HERO_RESET_COST_GOLD;
+        h.talents = {};
+        pushLog(s, '🔄', `Таланты сброшены за ${HERO_RESET_COST_GOLD} 👑 — очки возвращены.`, 'info');
+      }),
+
+      // Надеть предмет (по id из склада) в слот активного героя; текущий — обратно в склад.
+      equipHeroGear: (slot, gearId) => mutate((s) => {
+        const h = activeHero(s);
+        if (!h) return;
+        const item = s.heroSystem.gearInventory[gearId];
+        if (!item || !slotAccepts(slot, item)) return;
+        const prev = h.equipment[slot];
+        delete s.heroSystem.gearInventory[gearId];
+        h.equipment[slot] = item;
+        if (prev) s.heroSystem.gearInventory[prev.id] = prev;
+      }),
+
+      // Снять предмет — возвращается в склад.
+      unequipHeroGear: (slot) => mutate((s) => {
+        const h = activeHero(s);
+        if (!h) return;
+        const prev = h.equipment[slot];
+        if (!prev) return;
+        s.heroSystem.gearInventory[prev.id] = prev;
+        h.equipment[slot] = null;
+      }),
+
+      // Отправить активного героя в поход (тратит его энергию, открыт при Замке ур. 7).
+      startExpedition: (expId) => mutate((s) => {
+        const h = activeHero(s);
+        if (!h || h.expedition) return;
+        if ((s.buildings.castle ?? 1) < EXPEDITION_CASTLE_REQ) return;
+        const def = expeditionDef(expId);
+        if (!def) return;
+        if (heroLevelInfo(h.exp).level < def.minLevel) return;
+        const now = Date.now();
+        settleHeroEnergy(s, now);
+        if (h.energy < def.energyCost) return;
+        h.energy -= def.energyCost;
+        h.expedition = { id: expId, startedAt: now, endsAt: now + def.durationH * 3600_000 };
+        pushLog(s, def.icon, `Герой отправлен в поход: «${def.name}» (${def.durationH} ч).`, 'info');
+      }),
+
       startResearch: (r) => mutate((s) => {
         const def = RESEARCH[r];
         if ((s.buildings.academy ?? 0) < 1) return;
@@ -703,6 +1069,26 @@ export const useGame = create<Store>((set, get) => {
         const now = Date.now();
         const dur = (def.baseTime * Math.pow(def.timeGrowth, target - 1) * 1000) / researchSpeedMult(s);
         s.researchQueue.push({ id: uid(), research: r, targetLevel: target, startedAt: now, endsAt: now + dur });
+      }),
+
+      // Академия (древо эпох): поднять ранг узла за очки знаний.
+      researchAcademy: (nodeId) => mutate((s) => {
+        const node = academyNode(nodeId);
+        if (!node) return;
+        if ((s.buildings.academy ?? 0) < 1) return;                   // нужна построенная Академия
+        if (!eraResearchable(s, node.era)) return;                    // эра по Замку + 75% предыдущей
+        const cur = s.academy[nodeId] ?? 0;
+        if (cur >= ACADEMY_NODE_MAX) return;
+        if (!academyNodeUnlocked(node, s.academy)) return;              // нужен предыдущий узел
+        if (academyAvailablePoints(s) < node.cost) return;             // не хватает очков
+        s.academy[nodeId] = cur + 1;
+      }),
+
+      // Полный сброс Академии (очки знаний возвращаются).
+      resetAcademy: () => mutate((s) => {
+        if (Object.keys(s.academy).length === 0) return;
+        s.academy = {};
+        pushLog(s, '📜', 'Древо Академии сброшено — очки знаний возвращены.', 'info');
       }),
 
       trainUnits: (unitId, count) => mutate((s) => {
@@ -768,7 +1154,7 @@ export const useGame = create<Store>((set, get) => {
         s.stats.scoutsSent += 1;
         addQuestProgress(s, 'spy');
         const label = target.kind === 'camp' ? campName(target.camp!.level) : `замок ${target.bot!.name}`;
-        pushLog(s, kind === 'spy' ? '🕵️' : '🔭', `${kind === 'spy' ? 'Шпион' : 'Разведотряд'} отправлен в ${label}…`, 'info');
+        pushLog(s, kind === 'spy' ? '🕵️' : '🔭', `${kind === 'spy' ? 'Шпион' : 'Разведотряд'} отправлен в ${label}…`, 'scout', now, 'own');
       }),
 
       sendAttack: (targetId, units, formationId) => mutate((s) => {
@@ -777,6 +1163,11 @@ export const useGame = create<Store>((set, get) => {
         const now = Date.now();
         const pos = target.kind === 'camp' ? target.camp! : target.bot!;
         if (target.kind === 'castle' && target.bot!.shieldUntil > now) return; // под щитом нельзя
+        // Лагеря выше открытого Уровня Варваров атаковать нельзя
+        if (target.kind === 'camp' && target.camp!.level > unlockedBarbLevel(s.barbXp)) {
+          pushLog(s, '🔒', `Лагерь ур. ${target.camp!.level} ещё закрыт — копи Опыт Варваров.`, 'info');
+          return;
+        }
         const total = Object.values(units).reduce((a, b) => a + b, 0);
         if (total <= 0) return;
         for (const [id, n] of Object.entries(units)) {
@@ -790,7 +1181,7 @@ export const useGame = create<Store>((set, get) => {
           s.shieldUntil = 0; // атака снимает собственный щит — сразу можно надеть новый
           pushLog(s, '⚠️', 'Твой щит снят: ты начал атаку.', 'info');
         }
-        const dur = marchTimeMs(s.playerPos, pos);
+        const dur = marchTimeMs(s.playerPos, pos, (1 + heroBuffs(s).marchSpeed + academyBuffs(s).marchSpeed) * eraMarchFactor(s));
         s.marches.push({ id: uid(), targetId, targetKind: target.kind, units, formationId, startedAt: now, endsAt: now + dur });
         const label = target.kind === 'camp' ? campName(target.camp!.level) : `замку ${target.bot!.name}`;
         pushLog(s, '🐎', `Армия выступила к ${label}`, 'battle');
@@ -840,6 +1231,7 @@ export const useGame = create<Store>((set, get) => {
         s.resources.gold += def.reward;
         s.stats.questsDone += 1;
         addParagon(s, 50);
+        addHeroExp(s, 40);
         pushLog(s, '👑', `Задание «${def.name}» выполнено: +${def.reward} золота`, 'gold');
       }),
 
@@ -861,6 +1253,11 @@ export const useGame = create<Store>((set, get) => {
       }),
 
       dismissReport: () => set({ pendingReport: null }),
+
+      // Очистить донесения (бои/рейды/разведка) — для вкладок «Армия».
+      clearReports: () => mutate((s) => {
+        s.log = s.log.filter((e) => e.kind !== 'battle' && e.kind !== 'raid' && e.kind !== 'scout');
+      }),
 
       spendParagon: (nodeId) => mutate((s) => {
         if ((s.buildings.castle ?? 1) < PARAGON_CASTLE_REQ) return;
@@ -925,6 +1322,16 @@ export const useGame = create<Store>((set, get) => {
           s.resources.iron += 5000; s.resources.wood += 5000; s.resources.food += 5000;
         } else if (def.kind === 'silverbag') {
           s.resources.silver += 3000;
+        } else if (def.kind === 'heroExp') {
+          if (!activeHero(s)) return;          // нет активного героя — предмет не тратим
+          addHeroExp(s, 500);
+        } else if (def.kind === 'heroEnergy') {
+          const h = activeHero(s);
+          if (!h) return;
+          settleHeroEnergy(s, now);
+          h.energy = Math.min(heroEnergyMax(s), h.energy + 50);
+        } else if (def.kind === 'heroToken') {
+          return;                              // применяется в окне «Герой», не через «Применить»
         }
         s.inventory[itemId] -= 1;
         pushLog(s, def.icon, `Использован предмет: ${def.name}`, 'info');
@@ -944,6 +1351,23 @@ export const useGame = create<Store>((set, get) => {
 
       markMailSeen: () => mutate((s) => { s.mailSeen = Date.now(); }, false),
 
+      // Купить комплект сортировки армии за золото.
+      buyBattlePreset: (id) => mutate((s) => {
+        const def = BATTLE_PRESETS.find((p) => p.id === id);
+        if (!def || def.cost <= 0) return;
+        if (s.battlePresets.includes(id)) return;
+        if (s.resources.gold < def.cost) return;
+        s.resources.gold -= def.cost;
+        s.battlePresets = [...s.battlePresets, id];
+        pushLog(s, '🎖️', `Открыт комплект «${def.name}».`, 'info');
+      }),
+
+      // Сохранить расстановку комплекта (для Комплекта I/II и Быстрой атаки).
+      saveBattleLayout: (id, layout) => mutate((s) => {
+        if (id === 'default') return;
+        s.battleLayouts = { ...s.battleLayouts, [id]: layout };
+      }, false),
+
       // ---------- Онлайн: атака на реального игрока ----------
       sendPlayerAttack: (enemy, units, formationId) => mutate((s) => {
         const now = Date.now();
@@ -958,7 +1382,7 @@ export const useGame = create<Store>((set, get) => {
           s.shieldUntil = 0; // атака снимает свой щит
           pushLog(s, '⚠️', 'Твой щит снят: ты начал атаку.', 'info');
         }
-        const dur = marchTimeMs(s.playerPos, { x: enemy.x, y: enemy.y });
+        const dur = marchTimeMs(s.playerPos, { x: enemy.x, y: enemy.y }, (1 + heroBuffs(s).marchSpeed + academyBuffs(s).marchSpeed) * eraMarchFactor(s));
         s.marches.push({ id: uid(), targetId: enemy.id, targetKind: 'player', units, formationId, enemy, startedAt: now, endsAt: now + dur });
         pushLog(s, '🐎', `Армия выступила к замку лорда ${enemy.nick}`, 'battle');
       }),

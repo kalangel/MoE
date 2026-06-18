@@ -1,4 +1,4 @@
-import type { BuildingDef, BuildingId, FactionDef, FactionId, Resource } from './types';
+import type { BuildingDef, BuildingId, FactionDef, FactionId, Resource, ResourceBuildingId } from './types';
 import { FACTION_UNITS } from './units';
 
 export const RESOURCE_META: Record<Resource, { name: string; icon: string; color: string }> = {
@@ -69,6 +69,62 @@ export const FACTIONS: Record<FactionId, FactionDef> = {
     attackBonus: { sword: 1.15 },
     marchBonus: 1,
     units: FACTION_UNITS.shogun,
+  },
+};
+
+// ---- Титулы (лор фракций для экрана выбора) ----
+export interface FactionLore {
+  title: string;                                   // титул правителя
+  tagline: string;                                 // краткое преимущество (лицо карточки)
+  army: string[];                                  // строки «Преимущества армии»
+  economy: string[];                               // строки «Экономика»
+  identity: string;                                // девиз-идентичность (если секция пуста)
+  squads: { name: string; ability: string }[];     // сигнатурные отряды; ability — зелёным
+}
+export const FACTION_LORE: Record<FactionId, FactionLore> = {
+  highland: {
+    title: 'Патриций',
+    tagline: 'Камень и сталь: возводи быстрее и куй железо без устали.',
+    army: [],
+    economy: ['Скорость строительства: +15%', 'Поступление Железа: +20%'],
+    identity: 'Мощь в развитии: неприступные стены и полные склады.',
+    squads: [
+      { name: 'Тевтонские рыцари', ability: 'Стена щитов' },
+      { name: 'Лазутчики клана', ability: 'Скрытый удар' },
+    ],
+  },
+  tsars: {
+    title: 'Воевода',
+    tagline: 'Мудрость севера: наука и леса работают на тебя.',
+    army: [],
+    economy: ['Скорость изучения: +20%', 'Поступление Дерева: +20%'],
+    identity: 'Мощь в знаниях: технологии опережают врага на эпоху.',
+    squads: [
+      { name: 'Берсерки', ability: 'Боевая ярость' },
+      { name: 'Дружинники', ability: 'Клич дружины' },
+    ],
+  },
+  sultans: {
+    title: 'Султан',
+    tagline: 'Жар барханов: копья жалят, а орда растёт без края.',
+    army: ['Атака копейщиков: +15%', 'Размер отряда: +5%'],
+    economy: [],
+    identity: 'Мощь в войске: бесчисленная орда сметает любые стены.',
+    squads: [
+      { name: 'Ассасины', ability: 'Ответный удар' },
+      { name: 'Мамлюки', ability: 'Смертоносный удар' },
+    ],
+  },
+  shogun: {
+    title: 'Шогун',
+    tagline: 'Путь клинка: честь самурая и блеск серебра.',
+    army: ['Атака мечников: +15%'],
+    economy: ['Поступление Серебра: +20%'],
+    identity: 'Мощь в балансе: острый меч и полная казна.',
+    squads: [
+      { name: 'Ниндзя', ability: 'Тень клинка' },
+      { name: 'Самураи', ability: 'Путь бусидо' },
+    ],
   },
 };
 
@@ -143,6 +199,18 @@ export const BUILD_ORDER: BuildingId[] = [
   'castle', 'farm', 'ironMine', 'lumberMill', 'silverMine',
   'barracks', 'academy', 'temple', 'tavern', 'embassy',
 ];
+
+// ---- Ресурсная зона ----
+/** Сколько участков в стартовой ресурсной зоне. */
+export const RESOURCE_ZONE_SIZE = 12;
+/** Здания, которые можно ставить на любой участок (полный кастом, без ограничений). */
+export const RESOURCE_BUILDING_IDS: ResourceBuildingId[] = ['farm', 'lumberMill', 'ironMine', 'silverMine'];
+
+/** Реплики советника в стартовом онбординге. */
+export const ADVISOR = {
+  intro: 'Замок пуст, а рабочие бьют баклуши. Заложи основу нашей экономики.',
+  finish: 'Производство запущено. В твоём распоряжении ещё 11 участков — застраивай их с умом, исходя из своей стратегии.',
+};
 
 // ---- Щиты ----
 export interface ShieldDef {
@@ -264,21 +332,37 @@ export const DAILY_QUESTS: QuestDef[] = [
 
 export const START_RESOURCES = { iron: 600, wood: 600, silver: 400, food: 800, gold: 100 };
 
+// ---- Комплекты сортировки армии (экран «В бой») ----
+export interface BattlePresetDef { id: string; name: string; cost: number; manual: boolean; }
+export const BATTLE_PRESETS: BattlePresetDef[] = [
+  { id: 'default', name: 'По умолчанию', cost: 0, manual: false },
+  { id: 'kit1', name: 'Комплект I', cost: 5000, manual: true },
+  { id: 'kit2', name: 'Комплект II', cost: 25000, manual: true },
+  { id: 'fast', name: 'Быстрая атака', cost: 75000, manual: true },
+];
+
 // ---- Инвентарь (Предметы) ----
 export interface ItemDef {
   id: string;
   name: string;
   icon: string;
   desc: string;
-  kind: 'speedup' | 'shield' | 'respack' | 'silverbag';
+  kind: 'speedup' | 'shield' | 'respack' | 'silverbag' | 'heroToken' | 'heroExp' | 'heroEnergy';
 }
 export const ITEM_DEFS: ItemDef[] = [
   { id: 'speedup60', name: 'Ускорение 1ч', icon: '⏱️', desc: 'Сокращает активный таймер на 60 минут', kind: 'speedup' },
   { id: 'shield8', name: 'Щит 8ч', icon: '🛡️', desc: 'Мгновенно ставит щит на 8 часов', kind: 'shield' },
   { id: 'respack', name: 'Ресурсный пак', icon: '📦', desc: '+5000 железа, дерева, еды', kind: 'respack' },
   { id: 'silverbag', name: 'Мешок серебра', icon: '💰', desc: '+3000 серебра', kind: 'silverbag' },
+  // ---- Предметы героя ----
+  { id: 'heroSwapToken', name: 'Печать смены героя', icon: '🔁', desc: 'Позволяет сменить активного героя. Применяется в окне «Герой».', kind: 'heroToken' },
+  { id: 'heroTome', name: 'Том героя', icon: '📕', desc: '+500 опыта активному герою', kind: 'heroExp' },
+  { id: 'heroBrew', name: 'Эликсир энергии', icon: '⚡', desc: '+50 энергии героя', kind: 'heroEnergy' },
 ];
-export const START_INVENTORY: Record<string, number> = { speedup60: 3, shield8: 1, respack: 2, silverbag: 2 };
+export const START_INVENTORY: Record<string, number> = {
+  speedup60: 3, shield8: 1, respack: 2, silverbag: 2,
+  heroSwapToken: 1, heroTome: 2, heroBrew: 1,
+};
 
 // ---- Лотерея (ежедневный розыгрыш) ----
 export interface LotteryPrize { label: string; icon: string; apply: 'gold' | 'silver' | 'iron' | 'wood' | 'food' | 'item'; amount: number; itemId?: string }

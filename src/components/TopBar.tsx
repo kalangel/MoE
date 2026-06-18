@@ -2,6 +2,8 @@ import { useEffect, useState } from 'react';
 import { useGame } from '../game/store';
 import { FACTIONS, RESOURCE_META } from '../game/config';
 import { fmt, fmtDuration, foodUpkeepPerHour, productionPerHour } from '../game/balance';
+import { HEROES, activeHero, heroLevelInfo } from '../game/hero';
+import { useUI } from '../ui/uiStore';
 import type { Resource } from '../game/types';
 import { isFullscreen, toggleFullscreen } from '../ui/fullscreen';
 
@@ -12,6 +14,8 @@ export default function TopBar() {
   const upkeep = foodUpkeepPerHour(s.army);
   const foodNet = prod.food - upkeep;
   const f = FACTIONS[s.faction];
+  const openPage = useUI((u) => u.openPage);
+  const hero = activeHero(s);
   const [fs, setFs] = useState(isFullscreen());
   useEffect(() => {
     const h = () => setFs(isFullscreen());
@@ -34,10 +38,14 @@ export default function TopBar() {
 
   return (
     <div className="topband">
-      <div className="portrait" title={`${s.playerName} · ${f.name}`}>
-        🤴
-        <span className="lvl">{s.buildings.castle}</span>
-      </div>
+      <button
+        className="portrait portrait-btn"
+        title={hero ? `${HEROES[hero.id].name} — открыть героя` : 'Открыть героя'}
+        onClick={() => openPage('hero')}
+      >
+        {hero ? HEROES[hero.id].icon : '🤴'}
+        <span className="lvl">{hero ? heroLevelInfo(hero.exp).level : s.buildings.castle}</span>
+      </button>
       <div className="res-strip">
         {chips.map(({ res, rate }) => {
           const meta = RESOURCE_META[res];

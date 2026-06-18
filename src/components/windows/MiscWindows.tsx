@@ -1,4 +1,4 @@
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { useGame } from '../../game/store';
 import { ALLIES, FACTIONS, ITEM_DEFS, LOTTERY_PRIZES } from '../../game/config';
 import { botEffectivePower, fmt, fmtDuration, powerBreakdown } from '../../game/balance';
@@ -36,24 +36,56 @@ export function ItemsPage() {
   );
 }
 
+const MAIL_CAT: Record<string, { from: string; tone: string }> = {
+  battle: { from: 'Поле боя', tone: 'gm-blue' },
+  raid: { from: 'Тревога', tone: 'gm-red' },
+  scout: { from: 'Разведка', tone: 'gm-green' },
+  gold: { from: 'Казна', tone: 'gm-gold' },
+  build: { from: 'Стройка', tone: 'gm-slate' },
+  info: { from: 'Двор', tone: 'gm-slate' },
+};
+
 export function MailPage() {
   const log = useGame((s) => s.log);
   const a = useGame((s) => s.actions);
+  // Фиксируем «прочитано до» на момент открытия, чтобы непрочитанные подсветились.
+  const [seenAt] = useState(() => useGame.getState().mailSeen);
+  const unreadCount = log.filter((e) => e.at > seenAt).length;
   useEffect(() => { a.markMailSeen(); }, [a]);
+
   return (
     <Page icon="✉️" title="Почта">
-      {log.length === 0 && <div className="muted">Входящих сообщений нет.</div>}
-      {log.map((e) => (
-        <div key={e.id} className="wrow" style={{ padding: '7px 10px' }}>
-          <div className="wr-ic" style={{ width: 30, height: 30, fontSize: 16 }}>{e.icon}</div>
-          <div className="wr-main">
-            <div style={{ fontSize: 13, color: 'var(--parch)' }}>{e.text}</div>
-            <div className="wr-sub">{new Date(e.at).toLocaleString('ru-RU', { hour: '2-digit', minute: '2-digit', day: '2-digit', month: '2-digit' })}</div>
-          </div>
-        </div>
-      ))}
+      <div className="gm-toolbar">
+        <span className="gm-tb-title">📥 Входящие</span>
+        <span className="gm-tb-count">{log.length ? `1–${log.length} из ${log.length}` : '0'}{unreadCount > 0 && ` · ${unreadCount} новых`}</span>
+      </div>
+      <div className="gm-list">
+        {log.length === 0 && <div className="muted" style={{ padding: 14 }}>Входящих сообщений нет.</div>}
+        {log.map((e) => {
+          const cat = MAIL_CAT[e.kind] ?? MAIL_CAT.info;
+          const tone = e.kind === 'scout' && e.side === 'enemy' ? 'gm-red' : cat.tone;
+          const unread = e.at > seenAt;
+          return (
+            <div key={e.id} className={`gm-row ${unread ? 'unread' : ''}`}>
+              <span className="gm-star">{unread ? '★' : '☆'}</span>
+              <span className={`gm-from ${tone}`}>{e.icon} {cat.from}</span>
+              <span className="gm-msg">{e.text}</span>
+              <span className="gm-time">{mailTime(e.at)}</span>
+            </div>
+          );
+        })}
+      </div>
     </Page>
   );
+}
+
+function mailTime(at: number): string {
+  const d = new Date(at);
+  const today = new Date();
+  const sameDay = d.toDateString() === today.toDateString();
+  return sameDay
+    ? d.toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' })
+    : d.toLocaleDateString('ru-RU', { day: '2-digit', month: 'short' });
 }
 
 export function LeaderboardPage() {
