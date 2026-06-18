@@ -31,6 +31,18 @@ export function counterVs(attacker: UnitClass, defComp: Partial<Record<UnitClass
   return weight > 0 ? total / weight : 1;
 }
 
+/** Боевые навыки класса: против кого он силён (>1.15) и против кого слаб (<0.9). */
+export function classMatchups(cls: UnitClass): { strong: UnitClass[]; weak: UnitClass[] } {
+  const row = COUNTER[cls];
+  const strong: UnitClass[] = [];
+  const weak: UnitClass[] = [];
+  for (const [other, m] of Object.entries(row)) {
+    if ((m as number) >= 1.2) strong.push(other as UnitClass);
+    else if ((m as number) <= 0.9) weak.push(other as UnitClass);
+  }
+  return { strong, weak };
+}
+
 // ---------- Базовые статы по классам + ранги ----------
 const RANK_MULT: Record<number, number> = { 1: 1, 2: 1.38, 3: 1.85 };
 type Base = { atk: number; def: number; upkeep: number; train: number; cost: Partial<Resources> };

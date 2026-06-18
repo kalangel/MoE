@@ -1,4 +1,4 @@
-import { BUILDINGS, CAMP_REGEN_H, FACTIONS, RESEARCH, MARCH_SECONDS_PER_100PX, BOT_REGEN_H, RESOURCE_BUILDING_IDS, GATHER_BASE_CAPACITY } from './config';
+import { BUILDINGS, CAMP_REGEN_H, FACTIONS, RESEARCH, MARCH_SECONDS_PER_100PX, BOT_REGEN_H, RESOURCE_BUILDING_IDS, GATHER_BASE_RATE } from './config';
 import { unitById } from './units';
 import { paragonMultipliers, paragonSpent } from './paragon';
 import { BuffManager, heroBuffs, heroCommand } from './hero';
@@ -152,9 +152,17 @@ export function eraLootMult(s: GameState): number {
   return 1 + (currentEra(s) - 1) * 0.6;
 }
 
-/** Объём ресурсов, который армия увозит за один рейс мирного сбора (зависит от Эры и Академии). */
-export function gatherCapacity(s: GameState, nodeLevel: number): number {
-  return Math.round(GATHER_BASE_CAPACITY * (0.7 + nodeLevel * 0.3) * eraLootMult(s) * (1 + academyBuffs(s).gather));
+/** Скорость добычи ресурсов на плитке (ед./сек): растёт с Эрой и бонусом Академии «сбор». */
+export function gatherRatePerSec(s: GameState): number {
+  return GATHER_BASE_RATE * eraLootMult(s) * (1 + academyBuffs(s).gather);
+}
+
+/**
+ * Время полной добычи плитки. Армия забирает ВСЕ ресурсы плитки в любом случае,
+ * но чем больше объём — тем дольше (выше Эра → быстрее).
+ */
+export function gatherTimeMs(s: GameState, amount: number): number {
+  return Math.max(5000, (amount / gatherRatePerSec(s)) * 1000);
 }
 
 // ---------- Боты ----------

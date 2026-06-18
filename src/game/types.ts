@@ -359,6 +359,8 @@ export interface GameState {
   spyReports: Record<string, SpyReport>;
   nextRaidAt: number;
   nextBotActAt: number;
+  shieldDownSince: number;  // когда щит перестал быть активным (боты замечают незащищённость через ~1 мин)
+  nextRaidEvalAt: number;   // когда боты в следующий раз оценят угрозу/рейд
   quests: DailyQuestState;
   log: LogEntry[];
   chronicle: LogEntry[];

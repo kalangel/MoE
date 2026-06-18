@@ -8,6 +8,7 @@ import CastleSVG from '../components/CastleSVG';
 import { CommonDefs, LevelDisc } from '../components/svgKit';
 import BuildingGlyph from '../components/IsoBuilding';
 import BuildingModal from '../components/BuildingModal';
+import BarracksScreen from '../components/BarracksScreen';
 import { useUI } from '../ui/uiStore';
 import PlotModal from '../components/PlotModal';
 import ResourceZone from '../components/ResourceZone';
@@ -32,6 +33,7 @@ export default function KingdomView() {
   const [openBuilding, setOpenBuilding] = useState<BuildingId | null>(null);
   const [openPlot, setOpenPlot] = useState<number | null>(null);
   const [shieldOpen, setShieldOpen] = useState(false);
+  const [barracksOpen, setBarracksOpen] = useState(false);
   const now = Date.now();
   const f = FACTIONS[s.faction];
   const shielded = s.shieldUntil > now;
@@ -144,7 +146,7 @@ export default function KingdomView() {
             <BuildingPlot
               key={id}
               id={id}
-              onClick={() => (id === 'academy' ? openPage('research') : setOpenBuilding(id))}
+              onClick={() => (id === 'academy' ? openPage('research') : id === 'barracks' ? setBarracksOpen(true) : setOpenBuilding(id))}
             />
           ))}
         </svg>
@@ -186,6 +188,7 @@ export default function KingdomView() {
 
       <AnimatePresence>
         {openBuilding && <BuildingModal building={openBuilding} onClose={() => setOpenBuilding(null)} />}
+        {barracksOpen && <BarracksScreen onClose={() => setBarracksOpen(false)} />}
         {openPlot !== null && <PlotModal index={openPlot} onClose={() => setOpenPlot(null)} />}
         {shieldOpen && <ShieldPanel onClose={() => setShieldOpen(false)} />}
       </AnimatePresence>

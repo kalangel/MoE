@@ -1,15 +1,16 @@
 import { useState } from 'react';
 import { useGame } from '../game/store';
-import { FACTIONS, RESOURCE_META } from '../game/config';
+import { FACTIONS } from '../game/config';
 import { CLASS_META } from '../game/units';
 import {
-  armyAttack, armyDefense, canAfford, fmt, fmtDuration,
-  foodUpkeepPerHour, marchCapacity, productionPerHour, trainSpeedMult,
+  armyAttack, armyDefense, fmt, fmtDuration,
+  foodUpkeepPerHour, marchCapacity, productionPerHour,
 } from '../game/balance';
 import { paragonMultipliers } from '../game/paragon';
 import { heroBuffs } from '../game/hero';
-import type { HeroBuffKey, LogEntry, Resource, Resources, UnitClass } from '../game/types';
+import type { HeroBuffKey, LogEntry, UnitClass } from '../game/types';
 import { SpeedUpButton } from '../components/BuildingModal';
+import HireModal from '../components/HireModal';
 
 type Tab = 'overview' | 'reports' | 'recon' | 'raid';
 
@@ -51,7 +52,7 @@ function Overview() {
   const now = Date.now();
   const f = FACTIONS[s.faction];
   const totalUnits = Object.values(s.army).reduce((x, y) => x + y, 0);
-  const [counts, setCounts] = useState<Record<string, number>>({});
+  const [hireUnit, setHireUnit] = useState<string | null>(null);
 
   return (
     <>
@@ -131,52 +132,25 @@ function Overview() {
       )}
 
       <div className="section-title">🪖 Найм войск {(s.buildings.barracks ?? 0) < 1 && '— построй Казармы!'}</div>
-      {f.units.map((u) => {
-        const count = counts[u.id] ?? 100;
-        const cost: Partial<Resources> = {};
-        for (const [r, v] of Object.entries(u.cost)) cost[r as Resource] = (v as number) * count;
-        const affordable = canAfford(s.resources, cost);
-        const queueFull = s.trainQueue.length >= 2;
-        const trainMs = (u.trainTime * count * 1000) / trainSpeedMult(s);
-        return (
-          <div key={u.id} className="card">
-            <div className="unit-card" style={{ border: 'none', padding: 0, background: 'none' }}>
-              <div className="unit-glyph" style={{ fontSize: 28, width: 54, height: 54 }}>{u.icon}</div>
-              <div style={{ flex: 1 }}>
-                <b>{u.name}</b> <span className="muted">в замке: {s.army[u.id] ?? 0}</span>
-                <div className="stat-pills">
-                  <span className="stat-pill">⚔ {u.attack}</span>
-                  <span className="stat-pill">🛡 {u.defense}</span>
-                  <span className="stat-pill">🌾 {u.upkeep}/ч</span>
-                  <span className="stat-pill">⏱ {u.trainTime}с</span>
-                </div>
+      {f.units.map((u) => (
+        <div key={u.id} className="card">
+          <div className="unit-card" style={{ border: 'none', padding: 0, background: 'none' }}>
+            <div className="unit-glyph" style={{ fontSize: 28, width: 54, height: 54 }}>{u.icon}</div>
+            <div style={{ flex: 1 }}>
+              <b>{u.name}</b> <span className="muted">в замке: {s.army[u.id] ?? 0}</span>
+              <div className="stat-pills">
+                <span className="stat-pill">⚔ {u.attack}</span>
+                <span className="stat-pill">🛡 {u.defense}</span>
+                <span className="stat-pill">🌾 {u.upkeep}/ч</span>
+                <span className="stat-pill">⏱ {u.trainTime}с</span>
               </div>
             </div>
-            <div className="row between" style={{ marginTop: 10, flexWrap: 'wrap', gap: 8 }}>
-              <div className="count-stepper">
-                <button onClick={() => setCounts({ ...counts, [u.id]: Math.max(100, count - 100) })}>−100</button>
-                <input value={count} onChange={(e) => setCounts({ ...counts, [u.id]: Math.max(100, parseInt(e.target.value) || 100) })} />
-                <button onClick={() => setCounts({ ...counts, [u.id]: count + 100 })}>+100</button>
-              </div>
-              <div className="cost-row" style={{ margin: 0 }}>
-                {Object.entries(cost).map(([r, v]) => (
-                  <span key={r} className={`cost-item ${s.resources[r as Resource] < (v as number) ? 'lack' : ''}`}>
-                    {RESOURCE_META[r as Resource].icon} {fmt(v as number)}
-                  </span>
-                ))}
-                <span className="cost-item muted">⏱ {fmtDuration(trainMs)}</span>
-              </div>
-              <button
-                className="btn"
-                disabled={!affordable || queueFull || (s.buildings.barracks ?? 0) < 1}
-                onClick={() => a.trainUnits(u.id, count)}
-              >
-                🪖 Нанять
-              </button>
-            </div>
+            <button className="btn" disabled={(s.buildings.barracks ?? 0) < 1} onClick={() => setHireUnit(u.id)}>🪖 Обучить</button>
           </div>
-        );
-      })}
+        </div>
+      ))}
+
+      {hireUnit && <HireModal unitId={hireUnit} onClose={() => setHireUnit(null)} />}
     </>
   );
 }

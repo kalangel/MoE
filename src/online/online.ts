@@ -2,7 +2,7 @@ import { supabase, onlineConfigured } from './supabase';
 import { useOnlineStore } from './onlineStore';
 import { useGame, pvpOutbox } from '../game/store';
 import { powerBreakdown } from '../game/balance';
-import { PLAYER_POS } from '../game/config';
+import { MAP_SCALE, PLAYER_POS } from '../game/config';
 import type { AttackRow, GiftRow, OnlineEvent, OnlinePlayer } from './types';
 import type { Resource } from '../game/types';
 
@@ -45,9 +45,9 @@ function applySession(userId: string | null, email: string | null) {
 function ensurePlaced() {
   const s = useGame.getState();
   if (s.onlinePlaced) return;
-  // разнести замки игроков: случайная точка в пределах мира
-  const x = 500 + Math.floor(Math.random() * 1400);
-  const y = 400 + Math.floor(Math.random() * 800);
+  // разнести замки игроков: случайная точка в пределах увеличенного мира
+  const x = Math.round((500 + Math.random() * 1400) * MAP_SCALE);
+  const y = Math.round((400 + Math.random() * 800) * MAP_SCALE);
   s.actions.relocateForOnline(x, y);
 }
 

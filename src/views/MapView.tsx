@@ -1,8 +1,8 @@
 import { memo, useLayoutEffect, useRef, useState } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
 import { useGame } from '../game/store';
-import { FACTIONS, ITEM_DEFS, RESOURCE_NODE_META } from '../game/config';
-import { fmt, fmtDuration, gatherCapacity } from '../game/balance';
+import { FACTIONS, ITEM_DEFS, MAP_SCALE, RESOURCE_NODE_META, WORLD_W, WORLD_H } from '../game/config';
+import { fmt, fmtDuration, gatherTimeMs } from '../game/balance';
 import { useOnlineStore } from '../online/onlineStore';
 import type { Bot, Camp, FactionId, MarchTask } from '../game/types';
 import type { OnlinePlayer } from '../online/types';
@@ -15,9 +15,6 @@ import TeleportModal from '../components/TeleportModal';
 import ShieldDock from '../components/ShieldDock';
 import ChronicleTicker from '../components/ChronicleTicker';
 import type { MapTarget } from '../components/battleTypes';
-
-const WORLD_W = 2400;
-const WORLD_H = 1600;
 
 const lastPan = { x: 0, y: 0, init: false };
 
@@ -296,7 +293,9 @@ const WorldLayer = memo(function WorldLayer(props: WorldProps) {
         </linearGradient>
       </defs>
 
-      <rect width={WORLD_W} height={WORLD_H} fill="url(#mGrass)" />
+      {/* декорации заданы в исходных координатах 2400×1600 и масштабируются на увеличенный мир */}
+      <g transform={`scale(${MAP_SCALE})`}>
+      <rect width={2400} height={1600} fill="url(#mGrass)" />
       {/* светотень рельефа холмов */}
       <ellipse cx={760} cy={560} rx={520} ry={360} fill="#3e5e38" opacity="0.4" />
       <ellipse cx={1750} cy={1050} rx={560} ry={400} fill="#2a4226" opacity="0.45" />
@@ -304,7 +303,7 @@ const WorldLayer = memo(function WorldLayer(props: WorldProps) {
       <path d="M 200 200 Q 700 500 1180 760 Q 1650 1000 2150 1300" fill="none" stroke="url(#mPath)" strokeWidth="22" strokeLinecap="round" opacity="0.55" />
       <path d="M 200 200 Q 700 500 1180 760 Q 1650 1000 2150 1300" fill="none" stroke="#7a6440" strokeWidth="22" strokeLinecap="round" opacity="0.2" strokeDasharray="2 26" />
       <path d="M 400 1450 Q 900 1100 1180 760 Q 1500 380 2000 200" fill="none" stroke="url(#mPath)" strokeWidth="18" strokeLinecap="round" opacity="0.45" />
-      <rect width={WORLD_W} height={WORLD_H} fill="url(#mLight)" style={{ pointerEvents: 'none' }} />
+      <rect width={2400} height={1600} fill="url(#mLight)" style={{ pointerEvents: 'none' }} />
 
       <Lake cx={470} cy={470} rx={200} ry={130} />
       <Lake cx={1980} cy={560} rx={150} ry={100} />
@@ -316,6 +315,7 @@ const WorldLayer = memo(function WorldLayer(props: WorldProps) {
       <Forest x={760} y={180} n={9} /><Forest x={1820} y={300} n={8} /><Forest x={300} y={1120} n={9} />
       <Forest x={2050} y={1280} n={8} /><Forest x={900} y={1320} n={7} />
       {[[600, 880], [1700, 980], [950, 560], [2150, 760], [500, 1280]].map(([rx, ry], i) => <MapRocks key={i} x={rx} y={ry} />)}
+      </g>
 
       {/* лагеря варваров */}
       {camps.map((camp) => (
@@ -515,7 +515,7 @@ function GatherModal({ nodeId, onClose }: { nodeId: string; onClose: () => void 
   const busy = node.busyUntil > now;
   const army = s.army;
   const totalTroops = Object.values(army).reduce((x, y) => x + y, 0);
-  const cap = gatherCapacity(s, node.level);
+  const harvestMs = gatherTimeMs(s, node.amount);
   return (
     <div className="modal-backdrop" onClick={onClose} onPointerDown={(e) => e.stopPropagation()}>
       <motion.div className="modal" onClick={(e) => e.stopPropagation()}
@@ -524,11 +524,12 @@ function GatherModal({ nodeId, onClose }: { nodeId: string; onClose: () => void 
         <button className="close-x" onClick={onClose}>✕</button>
         <h2>{meta.icon} {meta.name} · ур. {node.level}</h2>
         <p className="muted" style={{ marginBottom: 10 }}>
-          Мирный сбор ресурсов. Пока армия фармит плитку — <b style={{ color: 'var(--green)' }}>Щит мира остаётся активным</b>, ты в безопасности.
+          Мирный сбор ресурсов. Армия соберёт плитку <b style={{ color: 'var(--green)' }}>полностью</b> — это лишь займёт время.
+          Пока идёт сбор, <b style={{ color: 'var(--green)' }}>Щит мира остаётся активным</b>.
         </p>
         <div className="card" style={{ padding: 10 }}>
-          <div className="row between"><span>В плитке осталось</span><b>{meta.icon} {fmt(node.amount)}</b></div>
-          <div className="row between"><span>Грузоподъёмность (Эра)</span><b style={{ color: 'var(--gold)' }}>{fmt(cap)} за рейс</b></div>
+          <div className="row between"><span>В плитке ресурсов</span><b>{meta.icon} {fmt(node.amount)}</b></div>
+          <div className="row between"><span>Время сбора (Эра)</span><b style={{ color: 'var(--gold)' }}>~{fmtDuration(harvestMs)}</b></div>
           <div className="row between"><span>Свободная армия</span><b>{fmt(totalTroops)} воинов</b></div>
         </div>
         <button className="btn gold" style={{ width: '100%', marginTop: 10 }}

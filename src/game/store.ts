@@ -2,7 +2,7 @@ import { create } from 'zustand';
 import {
   ALLIES, BATTLE_PRESETS, BLESSINGS, BLESSING_DURATION_H, BOT_ACT_MAX_M, BOT_ACT_MIN_M, BOT_SEEDS,
   BUILDINGS, CAMP_SEEDS, DAILY_QUESTS, EMBASSY_COOLDOWN_H, EMBASSY_HELP_MIN_PER_LVL,
-  FACTIONS, FACTION_CHANGE_COST, FREE_SHIELD_COOLDOWN_H, ITEM_DEFS, LOTTERY_PRIZES,
+  FACTIONS, FACTION_CHANGE_COST, FREE_SHIELD_COOLDOWN_H, ITEM_DEFS, LOTTERY_PRIZES, MAP_SCALE,
   PLAYER_POS, PLAYER_RAID_SAFE_POWER, RECON_COST_SILVER, RECON_MAX_S, RECON_MIN_S, RESEARCH,
   RESOURCE_BUILDING_IDS, RESOURCE_NODE_META, RESOURCE_NODE_SEEDS, RESOURCE_ZONE_SIZE,
   SHIELDS, SPEEDUP_GOLD_PER_MIN, SPY_COST_SILVER, SPY_MIN_S, STARTER_QUESTS, START_INVENTORY, START_RESOURCES,
@@ -10,7 +10,7 @@ import {
 } from './config';
 import {
   HOUR, armyAttack, armyDefense, botEffectivePower, buildingCost, buildingTimeMs,
-  campEffectivePower, canAfford, effectivePower, eraLootMult, foodUpkeepPerHour, gatherCapacity,
+  campEffectivePower, canAfford, effectivePower, eraLootMult, foodUpkeepPerHour, gatherTimeMs,
   marchTimeMs, paragonAttackMult, powerBreakdown, productionPerHour, researchSpeedMult, scoutTimeMs,
   todayKey, trainSpeedMult, uid, unitDef,
 } from './balance';
@@ -58,6 +58,8 @@ interface Actions {
   tick: (now: number) => void;
   startGame: (faction: FactionId, name: string) => void;
   startUpgrade: (b: BuildingId) => void;
+  instantUpgrade: (b: BuildingId) => void;
+  demolishBuilding: (b: BuildingId) => void;
   buildPlot: (plotIndex: number, type: ResourceBuildingId) => void;
   upgradePlot: (plotIndex: number) => void;
   advanceTutorial: () => void;
@@ -152,8 +154,8 @@ function refreshCamps(maxLevel: number): Camp[] {
       id: `camp_${uid()}`,
       level,
       basePower: Math.round(150 * Math.pow(level, 1.7)),
-      x: 300 + Math.round(Math.random() * 1600),
-      y: 300 + Math.round(Math.random() * 900),
+      x: Math.round((300 + Math.random() * 1600) * MAP_SCALE),
+      y: Math.round((300 + Math.random() * 900) * MAP_SCALE),
       damagedAt: 0,
       damageFraction: 0,
     });
@@ -264,6 +266,8 @@ export function freshState(now: number): GameState {
     spyReports: {},
     nextRaidAt: now + 3 * HOUR,
     nextBotActAt: now + 5 * 60_000,
+    shieldDownSince: 0,
+    nextRaidEvalAt: now + 60_000,
     quests: { date: todayKey(), progress: {}, claimed: {} },
     log: [],
     chronicle: [],
@@ -326,6 +330,8 @@ function loadState(): GameState {
         resourceNodes: parsed.resourceNodes ?? fresh.resourceNodes,
         starterClaimed: parsed.starterClaimed ?? {},
         club: parsed.club ?? null,
+        shieldDownSince: parsed.shieldDownSince ?? 0,
+        nextRaidEvalAt: parsed.nextRaidEvalAt ?? (now + 60_000),
       } as GameState;
     }
   } catch (e) {
@@ -526,15 +532,14 @@ function completeQueues(s: GameState, now: number, offline: boolean): BattleRepo
   return report;
 }
 
-/** Мирный сбор: армия забирает ресурсы из плитки (объём зависит от Эры). */
+/** Мирный сбор: армия забирает ВСЕ ресурсы плитки (время уже учтено в марше). */
 function harvestNode(s: GameState, node: ResourceNode | undefined, at: number): Partial<Resources> {
   if (!node) return {};
-  const cap = gatherCapacity(s, node.level);
-  const got = Math.min(cap, node.amount);
-  node.amount = Math.max(0, node.amount - got);
+  const got = node.amount;
+  node.amount = 0;
   node.busyUntil = 0;
   if (got <= 0) return {};
-  pushLog(s, RESOURCE_NODE_META[node.kind].icon, `Добыто на плитке: ${RESOURCE_NODE_META[node.kind].name} +${got}`, 'info', at);
+  pushLog(s, RESOURCE_NODE_META[node.kind].icon, `Плитка собрана дочиста: ${RESOURCE_NODE_META[node.kind].name} +${got}`, 'info', at);
   return { [node.kind]: got } as Partial<Resources>;
 }
 
@@ -889,34 +894,51 @@ function botActStep(s: GameState, now: number) {
 }
 
 /**
- * Возможный рейд бота на игрока (с защитой новичка). Рейд НЕ резолвится мгновенно:
- * планируется входящая атака с таймером марша — игрок видит красный экран и успевает
- * поставить Щит мира, чтобы развернуть врага без боя.
+ * Боты «играбельны»: если игрок без щита дольше минуты, ближайший открытый бот это замечает
+ * и реагирует — атакует (если явно сильнее обороны) либо шлёт разведку. Если бот не сильнее
+ * игрока, нападать он не станет. Атака планируется с таймером марша (красный экран, можно
+ * успеть поставить Щит мира — тогда враг развернётся без боя).
  */
-function maybePlayerRaid(s: GameState, now: number): void {
-  if (s.shieldUntil > now) return;          // под щитом — рейд не стартует
-  if (s.incomingAttacks.length > 0) return; // уже летит один рейд — не накапливаем
+function evaluateThreat(s: GameState, now: number): void {
+  if (!s.started) return;
+  if (s.shieldUntil > now) { s.shieldDownSince = 0; return; } // под щитом — угрозы нет
+  if (!s.shieldDownSince) s.shieldDownSince = now;
+  if (now - s.shieldDownSince < 60_000) return;   // боты замечают незащищённость через ~1 минуту
+  if (now < s.nextRaidEvalAt) return;
+  s.nextRaidEvalAt = now + 60_000;                // переоценка примерно раз в минуту
+  if (s.incomingAttacks.length > 0) return;       // уже летит рейд
+
   const myStrength = playerStrength(s, now);
-  if (myStrength < PLAYER_RAID_SAFE_POWER) return; // новичка почти не трогают
+  if (myStrength < PLAYER_RAID_SAFE_POWER) return; // защита новичка
+  const open = s.bots.filter((b) => b.shieldUntil <= now);
+  if (!open.length) return;
+  // Замечает сильнейший открытый бот
+  const raider = open.reduce((a, b) => (botPower(b, now) > botPower(a, now) ? b : a));
 
-  const candidates = s.bots.filter((b) => b.shieldUntil <= now);
-  if (!candidates.length) return;
-  const raider = candidates[Math.floor(Math.random() * candidates.length)];
+  const myDef = armyDefense(s, s.army, now) * 1.15 + 80;
+  const raidPower = botPower(raider, now) * (0.55 + Math.random() * 0.4);
 
-  const ratio = botPower(raider, now) / Math.max(1, myStrength);
-  const baseChance = 0.18 + Math.min(0.4, myStrength / 8000);
-  const chance = baseChance * Math.min(1.4, ratio + 0.3);
-  if (Math.random() > chance) return;
-
-  const raidPower = botPower(raider, now) * (0.45 + Math.random() * 0.5);
-  // Время подлёта: по дистанции, но не меньше 25с — чтобы успеть среагировать
-  const travel = Math.max(25_000, marchTimeMs({ x: raider.x, y: raider.y }, s.playerPos));
-  s.incomingAttacks.push({
-    id: uid(), raiderId: raider.id, raiderName: raider.name, power: Math.round(raidPower),
-    fromX: raider.x, fromY: raider.y, startedAt: now, endsAt: now + travel,
-  });
-  pushLog(s, '🚨', `${raider.name} выступил в рейд на твой замок! Успей поставить Щит мира.`, 'raid', now);
-  pushChronicle(s, '🚨', `${raider.name} ведёт войско к замку игрока`, now);
+  if (raidPower > myDef * 1.1) {
+    // Бот явно сильнее обороны — выступает в рейд
+    const travel = Math.max(25_000, marchTimeMs({ x: raider.x, y: raider.y }, s.playerPos));
+    s.incomingAttacks.push({
+      id: uid(), raiderId: raider.id, raiderName: raider.name, power: Math.round(raidPower),
+      fromX: raider.x, fromY: raider.y, startedAt: now, endsAt: now + travel,
+    });
+    pushLog(s, '🚨', `${raider.name} заметил твой замок без щита и выступил в рейд! Успей поставить Щит мира.`, 'raid', now);
+    pushChronicle(s, '🚨', `${raider.name} ведёт войско к замку игрока`, now);
+  } else {
+    // Бот не сильнее — нападать не станет, лишь прощупывает разведкой
+    if (Math.random() < 0.6) {
+      const tavern = s.buildings.tavern ?? 0;
+      const caught = Math.random() < Math.min(0.7, 0.2 + tavern * 0.08);
+      pushLog(s, '🕵️',
+        caught
+          ? `Шпион лорда ${raider.name} пойман у твоих незащищённых стен.`
+          : `Лорд ${raider.name} разведал твой замок без щита, но напасть не решился.`,
+        'scout', now, 'enemy');
+    }
+  }
 }
 
 // ---------- Главный тик (работает и для офлайн-дельты) ----------
@@ -939,9 +961,10 @@ function runTick(s: GameState, now: number): BattleReport | null {
     let aiGuard = 0;
     while (t >= s.nextBotActAt && aiGuard++ < 8) {
       botActStep(s, s.nextBotActAt);
-      maybePlayerRaid(s, s.nextBotActAt);
       s.nextBotActAt += (BOT_ACT_MIN_M + Math.random() * (BOT_ACT_MAX_M - BOT_ACT_MIN_M)) * 60_000;
     }
+    // Боты реагируют на незащищённость игрока (проверка каждый чанк)
+    evaluateThreat(s, t);
   }
   // Сброс ежедневных заданий
   if (s.quests.date !== todayKey()) {
@@ -1014,6 +1037,38 @@ export const useGame = create<Store>((set, get) => {
         const dur = buildingTimeMs(s, def, target);
         s.buildQueue.push({ id: uid(), building: b, targetLevel: target, startedAt: now, endsAt: now + dur });
         addQuestProgress(s, 'upgrade');
+      }),
+
+      // Моментальное улучшение здания за золото (без таймера и без слота очереди).
+      instantUpgrade: (b) => mutate((s) => {
+        const def = BUILDINGS[b];
+        const cur = s.buildings[b] ?? 0;
+        const target = cur + 1;
+        const castleLvl = s.buildings.castle ?? 1;
+        if (b !== 'castle' && target > castleLvl) return;
+        if (target > def.maxLevel) return;
+        if (s.buildQueue.some((t) => t.building === b)) return; // уже в очереди
+        const cost = buildingCost(def, target);
+        if (!canAfford(s.resources, cost)) return;
+        // Доплата золотом = по времени стройки (1 золото = 1 минута), минимум 5
+        const durMin = buildingTimeMs(s, def, target) / 60_000;
+        const goldCost = Math.max(5, Math.ceil(durMin));
+        if (s.resources.gold < goldCost) return;
+        for (const [r, v] of Object.entries(cost)) s.resources[r as Resource] -= v as number;
+        s.resources.gold -= goldCost;
+        s.buildings[b] = target;
+        addParagon(s, 25 + target * 5);
+        addQuestProgress(s, 'upgrade');
+        pushLog(s, '⚡', `${def.name} мгновенно улучшен до ур. ${target} за ${goldCost} 👑`, 'build');
+      }),
+
+      // Разрушить здание-сервис (Замок снести нельзя).
+      demolishBuilding: (b) => mutate((s) => {
+        if (b === 'castle') return;
+        if ((s.buildings[b] ?? 0) <= 0) return;
+        s.buildQueue = s.buildQueue.filter((t) => t.building !== b);
+        s.buildings[b] = 0;
+        pushLog(s, '🧨', `${BUILDINGS[b].name} разрушен.`, 'build');
       }),
 
       // Постройка нового ресурсного здания на пустом участке зоны (любой тип).
@@ -1310,7 +1365,9 @@ export const useGame = create<Store>((set, get) => {
           s.army[id] -= n;
           if (s.army[id] <= 0) delete s.army[id];
         }
-        const dur = marchTimeMs(s.playerPos, node, (1 + heroBuffs(s).marchSpeed + academyBuffs(s).marchSpeed) * eraMarchFactor(s));
+        const travel = marchTimeMs(s.playerPos, node, (1 + heroBuffs(s).marchSpeed + academyBuffs(s).marchSpeed) * eraMarchFactor(s));
+        // Армия соберёт ВСЮ плитку, но это требует времени (тем больше, чем больше объём).
+        const dur = travel + gatherTimeMs(s, node.amount);
         node.busyUntil = now + dur;
         // Мирный сбор НЕ снимает щит — игрок остаётся в безопасности, пока армия фармит.
         s.marches.push({

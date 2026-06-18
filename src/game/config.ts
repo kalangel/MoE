@@ -278,22 +278,28 @@ export const BLESSINGS = [
 export const TEMPLE_COOLDOWN_H = 2;
 export const BLESSING_DURATION_H = 1;
 
+// ---- Размер мира (карта увеличена ~10× по площади относительно прежней 2400×1600) ----
+export const MAP_SCALE = 3.2;
+const ms = (n: number) => Math.round(n * MAP_SCALE);
+export const WORLD_W = ms(2400);
+export const WORLD_H = ms(1600);
+
 // ---- Боты ----
 export const BOT_SEEDS = [
-  { id: 'tsarina', name: 'Tsarina', faction: 'tsars' as FactionId, level: 4, basePower: 950, x: 620, y: 360 },
-  { id: 'ayato', name: 'Ayato', faction: 'shogun' as FactionId, level: 3, basePower: 540, x: 1690, y: 420 },
-  { id: 'lushii', name: 'Lushii', faction: 'highland' as FactionId, level: 2, basePower: 260, x: 980, y: 1180 },
-  { id: 'condorin', name: 'Condorin', faction: 'sultans' as FactionId, level: 6, basePower: 1900, x: 1830, y: 1120 },
-  { id: 'richer', name: 'Richer', faction: 'highland' as FactionId, level: 4, basePower: 820, x: 420, y: 950 },
+  { id: 'tsarina', name: 'Tsarina', faction: 'tsars' as FactionId, level: 4, basePower: 950, x: ms(620), y: ms(360) },
+  { id: 'ayato', name: 'Ayato', faction: 'shogun' as FactionId, level: 3, basePower: 540, x: ms(1690), y: ms(420) },
+  { id: 'lushii', name: 'Lushii', faction: 'highland' as FactionId, level: 2, basePower: 260, x: ms(980), y: ms(1180) },
+  { id: 'condorin', name: 'Condorin', faction: 'sultans' as FactionId, level: 6, basePower: 1900, x: ms(1830), y: ms(1120) },
+  { id: 'richer', name: 'Richer', faction: 'highland' as FactionId, level: 4, basePower: 820, x: ms(420), y: ms(950) },
 ];
-export const PLAYER_POS = { x: 1200, y: 760 };
+export const PLAYER_POS = { x: ms(1200), y: ms(760) };
 
 // ---- Казармы варваров (нейтральные лагеря, уровни 1–3) ----
 export const CAMP_SEEDS = [
-  { id: 'camp_a', level: 1, basePower: 150, x: 1180, y: 470 },
-  { id: 'camp_b', level: 1, basePower: 175, x: 1470, y: 1170 },
-  { id: 'camp_c', level: 2, basePower: 480, x: 760, y: 600 },
-  { id: 'camp_d', level: 3, basePower: 1050, x: 2050, y: 770 },
+  { id: 'camp_a', level: 1, basePower: 150, x: ms(1180), y: ms(470) },
+  { id: 'camp_b', level: 1, basePower: 175, x: ms(1470), y: ms(1170) },
+  { id: 'camp_c', level: 2, basePower: 480, x: ms(760), y: ms(600) },
+  { id: 'camp_d', level: 3, basePower: 1050, x: ms(2050), y: ms(770) },
 ];
 export const CAMP_REGEN_H = 3; // лагерь восстанавливает силу за 3 часа после разгрома
 
@@ -314,7 +320,7 @@ export const SPEEDUP_GOLD_PER_MIN = 1;     // 1 золото = 1 минута у
 export const RAID_MIN_H = 2;               // рейды ботов: каждые 2–5 часов
 export const RAID_MAX_H = 5;
 export const BOT_REGEN_H = 2;              // боты восстанавливают силу за 2 часа
-export const MARCH_SECONDS_PER_100PX = 6;  // скорость похода по карте
+export const MARCH_SECONDS_PER_100PX = 3;  // скорость похода по карте (карта стала больше)
 
 export const ALLIES = ['SteelWolf', 'Mira', 'Dovahkiin', 'Greybeard'];
 
@@ -437,10 +443,10 @@ export const STARTER_QUESTS: StarterQuestDef[] = [
 
 // ---- Ресурсные точки карты (мирный фарм плиток) ----
 export const RESOURCE_NODE_SEEDS: { id: string; kind: ResourceNodeKind; level: number; x: number; y: number; amount: number }[] = [
-  { id: 'rn_food',   kind: 'food',   level: 1, x: 980,  y: 560,  amount: 6000 },
-  { id: 'rn_wood',   kind: 'wood',   level: 1, x: 1480, y: 540,  amount: 6000 },
-  { id: 'rn_iron',   kind: 'iron',   level: 2, x: 1620, y: 1000, amount: 7000 },
-  { id: 'rn_silver', kind: 'silver', level: 2, x: 860,  y: 1000, amount: 5000 },
+  { id: 'rn_food',   kind: 'food',   level: 1, x: ms(980),  y: ms(560),  amount: 6000 },
+  { id: 'rn_wood',   kind: 'wood',   level: 1, x: ms(1480), y: ms(540),  amount: 6000 },
+  { id: 'rn_iron',   kind: 'iron',   level: 2, x: ms(1620), y: ms(1000), amount: 7000 },
+  { id: 'rn_silver', kind: 'silver', level: 2, x: ms(860),  y: ms(1000), amount: 5000 },
 ];
 export const RESOURCE_NODE_META: Record<ResourceNodeKind, { name: string; icon: string; color: string }> = {
   silver: { name: 'Серебряная жила', icon: '🪙', color: '#c9d4e0' },
@@ -448,4 +454,5 @@ export const RESOURCE_NODE_META: Record<ResourceNodeKind, { name: string; icon: 
   iron:   { name: 'Залежи железа',   icon: '⛏️', color: '#9aa7b5' },
   food:   { name: 'Хлебное поле',    icon: '🌾', color: '#d9b44a' },
 };
-export const GATHER_BASE_CAPACITY = 800;   // базовый объём добычи за рейс (Эра I)
+// Скорость добычи на плитке (ед./сек, Эра I). Армия собирает ВСЮ плитку, но дольше при большом объёме.
+export const GATHER_BASE_RATE = 15;

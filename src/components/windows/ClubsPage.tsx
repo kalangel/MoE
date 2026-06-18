@@ -8,48 +8,65 @@ import Page from '../Page';
 export default function ClubsPage() {
   const club = useGame((s) => s.club);
   return (
-    <Page icon="🏛️" title={club ? `Клуб «${club.name}»` : 'Клубы'}>
+    <Page icon="🛡️" title={club ? `Союз «${club.name}»` : 'Союзы'}>
       {club ? <MyClub /> : <NoClub />}
     </Page>
   );
 }
 
-// ---------- Нет клуба: поиск + создание ----------
+// ---------- Нет союза: список существующих + кнопка «Создать союз» ----------
 function NoClub() {
   const a = useGame((s) => s.actions);
   const seeds = joinableClubs();
+  const [creating, setCreating] = useState(false);
   const [name, setName] = useState('');
   const [tag, setTag] = useState('');
   const [type, setType] = useState<ClubType>('open');
+
+  if (creating) {
+    return (
+      <>
+        <div className="section-title">Создание союза</div>
+        <div className="card">
+          <div className="club-form">
+            <input className="club-input" placeholder="Название союза" value={name} maxLength={28} onChange={(e) => setName(e.target.value)} />
+            <input className="club-input" placeholder="Тег (до 5)" value={tag} maxLength={5} onChange={(e) => setTag(e.target.value.toUpperCase())} />
+          </div>
+          <div className="muted" style={{ fontSize: 12, marginTop: 8 }}>Тип вступления:</div>
+          <div className="row" style={{ gap: 8, marginTop: 4 }}>
+            <button className={`btn sm ${type === 'open' ? 'gold' : 'ghost'}`} onClick={() => setType('open')}>Открытый</button>
+            <button className={`btn sm ${type === 'moderated' ? 'gold' : 'ghost'}`} onClick={() => setType('moderated')}>По приглашению</button>
+          </div>
+          <div className="muted" style={{ fontSize: 12, marginTop: 6 }}>
+            {type === 'open' ? 'Любой может вступить без одобрения.' : 'Вход по заявке / с модерацией.'}
+          </div>
+          <div className="row" style={{ gap: 8, marginTop: 10 }}>
+            <button className="btn ghost" style={{ flex: 1 }} onClick={() => setCreating(false)}>← Назад</button>
+            <button className="btn gold" style={{ flex: 2 }} disabled={!name.trim()} onClick={() => a.createClub(name, tag, type)}>
+              🏛️ Создать союз
+            </button>
+          </div>
+        </div>
+      </>
+    );
+  }
 
   return (
     <>
       <div className="card">
         <p className="muted" style={{ margin: 0 }}>
-          В начале игры лорд не состоит ни в одном клубе. Вступи в существующий союз или создай свой — это бесплатно.
+          Ты пока не состоишь ни в одном союзе. Вступи в существующий или создай свой.
         </p>
       </div>
 
-      <div className="section-title">Создать клуб</div>
-      <div className="card">
-        <div className="club-form">
-          <input className="club-input" placeholder="Название клуба" value={name} maxLength={28} onChange={(e) => setName(e.target.value)} />
-          <input className="club-input" placeholder="Тег (до 5)" value={tag} maxLength={5} onChange={(e) => setTag(e.target.value.toUpperCase())} />
-        </div>
-        <div className="row" style={{ gap: 8, marginTop: 8 }}>
-          <button className={`btn sm ${type === 'open' ? 'gold' : 'ghost'}`} onClick={() => setType('open')}>Открытый</button>
-          <button className={`btn sm ${type === 'moderated' ? 'gold' : 'ghost'}`} onClick={() => setType('moderated')}>По приглашению</button>
-        </div>
-        <div className="muted" style={{ fontSize: 12, marginTop: 6 }}>
-          {type === 'open' ? 'Любой может вступить без одобрения.' : 'Вход по заявке / с модерацией.'}
-        </div>
-        <button className="btn gold" style={{ width: '100%', marginTop: 10 }} disabled={!name.trim()}
-          onClick={() => a.createClub(name, tag, type)}>
-          🏛️ Создать клуб (бесплатно)
-        </button>
-      </div>
+      <button className="btn gold" style={{ width: '100%' }} onClick={() => setCreating(true)}>➕ Создать союз</button>
 
-      <div className="section-title">Поиск клубов</div>
+      <div className="section-title">Существующие союзы</div>
+      {seeds.length === 0 && (
+        <div className="card muted" style={{ fontSize: 13 }}>
+          Пока нет ни одного союза. Стань первым — создай свой и собери лордов под одним знаменем.
+        </div>
+      )}
       {seeds.map((c) => (
         <div key={c.id} className="wrow" style={{ padding: '8px 10px' }}>
           <div className="wr-ic" style={{ width: 34, height: 34, fontSize: 16 }}>🏰</div>
@@ -155,8 +172,8 @@ function MyClub() {
         {(s.buildings.embassy ?? 0) < 1 && <div className="muted" style={{ marginTop: 6 }}>Нужно построить Посольство.</div>}
       </div>
 
-      <button className="btn danger" style={{ width: '100%', marginTop: 14 }} onClick={() => { if (confirm('Покинуть клуб?')) a.leaveClub(); }}>
-        🚪 Покинуть клуб
+      <button className="btn danger" style={{ width: '100%', marginTop: 14 }} onClick={() => { if (confirm('Покинуть союз?')) a.leaveClub(); }}>
+        🚪 Покинуть союз
       </button>
     </>
   );
