@@ -1,10 +1,10 @@
 import { memo, useLayoutEffect, useRef, useState } from 'react';
-import { AnimatePresence } from 'framer-motion';
+import { AnimatePresence, motion } from 'framer-motion';
 import { useGame } from '../game/store';
-import { FACTIONS } from '../game/config';
-import { fmt, fmtDuration } from '../game/balance';
+import { FACTIONS, ITEM_DEFS, RESOURCE_NODE_META } from '../game/config';
+import { fmt, fmtDuration, gatherCapacity } from '../game/balance';
 import { useOnlineStore } from '../online/onlineStore';
-import type { Bot, Camp, FactionId } from '../game/types';
+import type { Bot, Camp, FactionId, MarchTask, ResourceNode } from '../game/types';
 import type { OnlinePlayer } from '../online/types';
 import CastleSVG from '../components/CastleSVG';
 import BarbarianCamp from '../components/BarbarianCamp';
@@ -29,6 +29,9 @@ export default function MapView() {
   const [target, setTarget] = useState<MapTarget | null>(null);
   const [battle, setBattle] = useState<MapTarget | null>(null);
   const [teleportAt, setTeleportAt] = useState<{ x: number; y: number } | null>(null);
+  const [marchMenu, setMarchMenu] = useState<string | null>(null);   // id похода (контекстное меню)
+  const [accelMarch, setAccelMarch] = useState<string | null>(null); // id похода (окно ускорителей)
+  const [gatherNode, setGatherNode] = useState<string | null>(null); // id ресурсной точки
   const viewportRef = useRef<HTMLDivElement>(null);
   const svgRef = useRef<SVGSVGElement>(null);
   const drag = useRef<{ x: number; y: number; px: number; py: number; moved: boolean } | null>(null);
@@ -157,21 +160,59 @@ export default function MapView() {
             </g>
           );
         })}
-        {/* походы */}
+        {/* ресурсные точки (мирный сбор) */}
+        {s.resourceNodes.map((rn) => {
+          const meta = RESOURCE_NODE_META[rn.kind];
+          const busy = rn.busyUntil > now;
+          const depleted = rn.amount <= 0;
+          return (
+            <g key={rn.id} style={{ cursor: depleted ? 'default' : 'pointer' }}
+              onClick={(e) => { e.stopPropagation(); if (!depleted && !drag.current?.moved) setGatherNode(rn.id); }}>
+              <circle cx={rn.x} cy={rn.y} r="26" fill="#15291a" stroke={busy ? '#d9b44a' : '#3f7f4f'} strokeWidth="2.5" opacity={depleted ? 0.4 : 0.95} />
+              <text x={rn.x} y={rn.y + 7} textAnchor="middle" fontSize="22">{meta.icon}</text>
+              <NamePlate x={rn.x} y={rn.y + 40} text={depleted ? 'Истощено' : `${meta.name} ур.${rn.level}`} color={meta.color} />
+              {busy && <text x={rn.x} y={rn.y - 34} textAnchor="middle" fontSize="11" fill="#f0d9a0" fontWeight="600">⛏ сбор…</text>}
+            </g>
+          );
+        })}
+
+        {/* походы игрока (атака / сбор / возврат) */}
         {s.marches.map((m) => {
-          const t = s.bots.find((b) => b.id === m.targetId) ?? s.camps.find((c) => c.id === m.targetId)
-            ?? (m.enemy ? { x: m.enemy.x, y: m.enemy.y } : onlinePlayers.find((p) => p.id === m.targetId));
-          if (!t) return null;
-          const p = Math.min(1, (now - m.startedAt) / (m.endsAt - m.startedAt));
-          const mx = px + (t.x - px) * p;
-          const my = py + (t.y - py) * p;
+          const ends = m.dest ?? findEndpoint(m, s.bots, s.camps, onlinePlayers);
+          const home = m.origin ?? { x: px, y: py };
+          if (!ends) return null;
+          const from = m.returning ? ends : home;
+          const to = m.returning ? home : ends;
+          const p = Math.min(1, (now - m.startedAt) / Math.max(1, m.endsAt - m.startedAt));
+          const mx = from.x + (to.x - from.x) * p;
+          const my = from.y + (to.y - from.y) * p;
+          const color = m.returning ? '#5a9ad6' : m.kind === 'gather' ? '#4fa35f' : '#d65a4a';
+          const icon = m.returning ? '↩️' : m.kind === 'gather' ? '🌾' : '⚔️';
           return (
             <g key={m.id}>
-              <line className="march-line" x1={px} y1={py} x2={t.x} y2={t.y} stroke="#d65a4a" strokeWidth="3" opacity="0.65" />
+              <line x1={from.x} y1={from.y} x2={to.x} y2={to.y} stroke={color} strokeWidth="3" opacity="0.55" strokeDasharray={m.kind === 'gather' ? '8 6' : undefined} />
+              <g transform={`translate(${mx}, ${my})`} style={{ cursor: 'pointer' }}
+                onClick={(e) => { e.stopPropagation(); if (!drag.current?.moved) setMarchMenu(m.id); }}>
+                <circle r="16" fill="#1a212b" stroke={color} strokeWidth="2.5" />
+                <text y="5" textAnchor="middle" fontSize="14">{icon}</text>
+                <text y="-23" textAnchor="middle" fontSize="12" fill="#f0c0b0" fontWeight="600">{fmtDuration(m.endsAt - now)}</text>
+              </g>
+            </g>
+          );
+        })}
+
+        {/* входящие рейды врага */}
+        {s.incomingAttacks.map((ia) => {
+          const p = Math.min(1, (now - ia.startedAt) / Math.max(1, ia.endsAt - ia.startedAt));
+          const mx = ia.fromX + (px - ia.fromX) * p;
+          const my = ia.fromY + (py - ia.fromY) * p;
+          return (
+            <g key={ia.id}>
+              <line x1={ia.fromX} y1={ia.fromY} x2={px} y2={py} stroke="#ff4d4d" strokeWidth="3" opacity="0.7" strokeDasharray="6 6" />
               <g transform={`translate(${mx}, ${my})`}>
-                <circle r="15" fill="#1a212b" stroke="#d65a4a" strokeWidth="2" />
-                <text y="5" textAnchor="middle" fontSize="14">⚔️</text>
-                <text y="-22" textAnchor="middle" fontSize="12" fill="#f0c0b0" fontWeight="600">{fmtDuration(m.endsAt - now)}</text>
+                <circle r="16" fill="#2a1212" stroke="#ff4d4d" strokeWidth="2.5" />
+                <text y="5" textAnchor="middle" fontSize="14">🗡️</text>
+                <text y="-23" textAnchor="middle" fontSize="12" fill="#ff9b9b" fontWeight="700">{fmtDuration(ia.endsAt - now)}</text>
               </g>
             </g>
           );
@@ -192,6 +233,15 @@ export default function MapView() {
         )}
         {battle && <BattleScreen target={battle} onClose={() => setBattle(null)} />}
         {teleportAt && <TeleportModal x={teleportAt.x} y={teleportAt.y} onClose={() => setTeleportAt(null)} />}
+        {marchMenu && (
+          <MarchMenu
+            marchId={marchMenu}
+            onClose={() => setMarchMenu(null)}
+            onAccelerate={() => { setAccelMarch(marchMenu); setMarchMenu(null); }}
+          />
+        )}
+        {accelMarch && <AccelerateModal marchId={accelMarch} onClose={() => setAccelMarch(null)} />}
+        {gatherNode && <GatherModal nodeId={gatherNode} onClose={() => setGatherNode(null)} />}
       </AnimatePresence>
     </div>
   );
@@ -383,6 +433,111 @@ function ShieldTag({ x, y, until, now }: { x: number; y: number; until: number; 
       <rect x="-46" y="-12" width="92" height="20" rx="10" fill="#0d1722" stroke="#7fd8ff" opacity="0.92" />
       <text y="3" textAnchor="middle" fontSize="11.5" fill="#aee4ff">🛡 {fmtDuration(until - now)}</text>
     </g>
+  );
+}
+
+// ---------- Управление походами игрока ----------
+function findEndpoint(m: MarchTask, bots: Bot[], camps: Camp[], players: OnlinePlayer[]): { x: number; y: number } | null {
+  const t = bots.find((b) => b.id === m.targetId) ?? camps.find((c) => c.id === m.targetId)
+    ?? (m.enemy ? { x: m.enemy.x, y: m.enemy.y } : players.find((p) => p.id === m.targetId));
+  return t ? { x: t.x, y: t.y } : null;
+}
+
+/** Контекстное меню активного похода: «Ускорить» и «Отозвать». */
+function MarchMenu({ marchId, onClose, onAccelerate }: { marchId: string; onClose: () => void; onAccelerate: () => void }) {
+  const m = useGame((st) => st.marches.find((x) => x.id === marchId));
+  const a = useGame((st) => st.actions);
+  const now = Date.now();
+  if (!m) { return null; }
+  const kindLabel = m.returning ? 'Возврат домой' : m.kind === 'gather' ? 'Сбор ресурсов' : 'Атакующий поход';
+  return (
+    <div className="modal-backdrop" onClick={onClose} onPointerDown={(e) => e.stopPropagation()}>
+      <motion.div className="modal" style={{ maxWidth: 340 }} onClick={(e) => e.stopPropagation()}
+        initial={{ scale: 0.85, opacity: 0, y: 16 }} animate={{ scale: 1, opacity: 1, y: 0 }} exit={{ scale: 0.85, opacity: 0 }}
+        transition={{ type: 'spring', stiffness: 420, damping: 28 }}>
+        <button className="close-x" onClick={onClose}>✕</button>
+        <h2>🐎 Поход</h2>
+        <p className="muted" style={{ marginBottom: 10 }}>{kindLabel} · до прибытия {fmtDuration(m.endsAt - now)}</p>
+        <div className="row" style={{ gap: 10 }}>
+          <button className="btn gold" style={{ flex: 1 }} onClick={onAccelerate}>⏱️ Ускорить</button>
+          <button className="btn danger" style={{ flex: 1 }} disabled={m.returning}
+            onClick={() => { a.recallMarch(marchId); onClose(); }}>↩️ Отозвать</button>
+        </div>
+        {m.returning && <div className="muted" style={{ marginTop: 8 }}>Армия уже возвращается домой.</div>}
+      </motion.div>
+    </div>
+  );
+}
+
+/** Окно ускорителей марша из инвентаря. */
+function AccelerateModal({ marchId, onClose }: { marchId: string; onClose: () => void }) {
+  const m = useGame((st) => st.marches.find((x) => x.id === marchId));
+  const inv = useGame((st) => st.inventory);
+  const a = useGame((st) => st.actions);
+  const now = Date.now();
+  const items = ITEM_DEFS.filter((i) => i.kind === 'marchspeed');
+  const owned = items.filter((i) => (inv[i.id] ?? 0) > 0);
+  return (
+    <div className="modal-backdrop" onClick={onClose} onPointerDown={(e) => e.stopPropagation()}>
+      <motion.div className="modal" onClick={(e) => e.stopPropagation()}
+        initial={{ scale: 0.85, opacity: 0, y: 16 }} animate={{ scale: 1, opacity: 1, y: 0 }} exit={{ scale: 0.85, opacity: 0 }}
+        transition={{ type: 'spring', stiffness: 420, damping: 28 }}>
+        <button className="close-x" onClick={onClose}>✕</button>
+        <h2>⏱️ Ускорить марш</h2>
+        <p className="muted" style={{ marginBottom: 10 }}>
+          {m ? `До прибытия ${fmtDuration(m.endsAt - now)}.` : ''} Применение мгновенно сокращает оставшееся время.
+        </p>
+        {owned.length === 0 && <div className="muted">Нет предметов-ускорителей. Их дают за квесты, варваров и в магазине.</div>}
+        {owned.map((it) => (
+          <div key={it.id} className="card row between" style={{ padding: 10 }}>
+            <div>
+              <b>{it.icon} {it.name} <span style={{ color: 'var(--gold-lt)' }}>×{inv[it.id] ?? 0}</span></b>
+              <div className="muted">{it.desc}</div>
+            </div>
+            <button className="btn gold sm" onClick={() => { a.accelerateMarch(marchId, it.id); if ((inv[it.id] ?? 0) <= 1) onClose(); }}>
+              Применить
+            </button>
+          </div>
+        ))}
+      </motion.div>
+    </div>
+  );
+}
+
+/** Окно отправки армии на мирный сбор ресурсов (щит сохраняется). */
+function GatherModal({ nodeId, onClose }: { nodeId: string; onClose: () => void }) {
+  const s = useGame();
+  const a = useGame((st) => st.actions);
+  const node = s.resourceNodes.find((n) => n.id === nodeId);
+  const now = Date.now();
+  if (!node) { return null; }
+  const meta = RESOURCE_NODE_META[node.kind];
+  const busy = node.busyUntil > now;
+  const army = s.army;
+  const totalTroops = Object.values(army).reduce((x, y) => x + y, 0);
+  const cap = gatherCapacity(s, node.level);
+  return (
+    <div className="modal-backdrop" onClick={onClose} onPointerDown={(e) => e.stopPropagation()}>
+      <motion.div className="modal" onClick={(e) => e.stopPropagation()}
+        initial={{ scale: 0.85, opacity: 0, y: 16 }} animate={{ scale: 1, opacity: 1, y: 0 }} exit={{ scale: 0.85, opacity: 0 }}
+        transition={{ type: 'spring', stiffness: 420, damping: 28 }}>
+        <button className="close-x" onClick={onClose}>✕</button>
+        <h2>{meta.icon} {meta.name} · ур. {node.level}</h2>
+        <p className="muted" style={{ marginBottom: 10 }}>
+          Мирный сбор ресурсов. Пока армия фармит плитку — <b style={{ color: 'var(--green)' }}>Щит мира остаётся активным</b>, ты в безопасности.
+        </p>
+        <div className="card" style={{ padding: 10 }}>
+          <div className="row between"><span>В плитке осталось</span><b>{meta.icon} {fmt(node.amount)}</b></div>
+          <div className="row between"><span>Грузоподъёмность (Эра)</span><b style={{ color: 'var(--gold)' }}>{fmt(cap)} за рейс</b></div>
+          <div className="row between"><span>Свободная армия</span><b>{fmt(totalTroops)} воинов</b></div>
+        </div>
+        <button className="btn gold" style={{ width: '100%', marginTop: 10 }}
+          disabled={busy || totalTroops <= 0 || node.amount <= 0}
+          onClick={() => { a.sendGather(nodeId, { ...army }); onClose(); }}>
+          {busy ? `Занято сбором (${fmtDuration(node.busyUntil - now)})` : totalTroops <= 0 ? 'Нет свободной армии' : '🌾 Отправить армию на сбор'}
+        </button>
+      </motion.div>
+    </div>
   );
 }
 

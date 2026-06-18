@@ -1,6 +1,6 @@
 import { useEffect } from 'react';
 import { useGame } from '../../game/store';
-import { ALLIES, FACTIONS, ITEM_DEFS, LOTTERY_PRIZES } from '../../game/config';
+import { FACTIONS, ITEM_DEFS, LOTTERY_PRIZES } from '../../game/config';
 import { botEffectivePower, fmt, fmtDuration, powerBreakdown } from '../../game/balance';
 import { toggleFullscreen } from '../../ui/fullscreen';
 import { onlineConfigured, signOut } from '../../online/online';
@@ -96,29 +96,6 @@ export function LotteryPage() {
       <button className="btn gold" style={{ width: '100%' }} disabled={!ready} onClick={() => a.claimLottery()}>
         {ready ? '🎲 Крутить (раз в день)' : 'Сегодня уже разыграно — приходи завтра'}
       </button>
-    </Page>
-  );
-}
-
-export function AlliancePage() {
-  const s = useGame();
-  const a = useGame((st) => st.actions);
-  const now = Date.now();
-  const onCd = s.embassyCooldownUntil > now;
-  return (
-    <Page icon="🛡️" title="Альянс «Стальные Волки»">
-      <p className="muted" style={{ marginBottom: 10 }}>Союзники помогают ускорять таймеры (через Посольство).</p>
-      {ALLIES.map((name) => (
-        <div key={name} className="wrow" style={{ padding: '8px 10px' }}>
-          <div className="wr-ic" style={{ width: 30, height: 30, fontSize: 16 }}>🤝</div>
-          <div className="wr-main"><div className="wr-title" style={{ fontSize: 13 }}>{name}</div><div className="wr-sub">в сети</div></div>
-          <span style={{ color: 'var(--green)' }}>●</span>
-        </div>
-      ))}
-      <button className="btn btn-blue" style={{ width: '100%', marginTop: 6 }} disabled={(s.buildings.embassy ?? 0) < 1 || onCd} onClick={() => a.embassyHelp()}>
-        🤝 Запросить помощь {onCd ? `(${fmtDuration(s.embassyCooldownUntil - now)})` : ''}
-      </button>
-      {(s.buildings.embassy ?? 0) < 1 && <div className="muted" style={{ marginTop: 6 }}>Нужно построить Посольство.</div>}
     </Page>
   );
 }

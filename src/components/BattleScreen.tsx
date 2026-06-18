@@ -64,13 +64,13 @@ export default function BattleScreen({ target, onClose }: { target: MapTarget; o
       const cur = next[slotId];
       if (cur && cur.unitId === selectedUnit) {
         const room = Math.min(available(selectedUnit), remainingCap);
-        next[slotId] = { unitId: selectedUnit, count: cur.count + Math.min(10, Math.max(0, room)) };
+        next[slotId] = { unitId: selectedUnit, count: cur.count + Math.min(100, Math.max(0, room)) };
       } else {
         // освобождаем прежний стек слота, кладём новый
         const freed = cur ? cur.count : 0;
         const avail = (s.army[selectedUnit] ?? 0) - (usedPerUnit[selectedUnit] ?? 0) + (cur?.unitId === selectedUnit ? freed : 0);
         const capRoom = cap - (total - freed);
-        const add = Math.min(10, Math.max(0, Math.min(avail, capRoom)));
+        const add = Math.min(100, Math.max(0, Math.min(avail, capRoom)));
         if (add <= 0 && !cur) return prev;
         next[slotId] = { unitId: selectedUnit, count: add };
       }
@@ -156,8 +156,8 @@ export default function BattleScreen({ target, onClose }: { target: MapTarget; o
                   <div className="bs-slot-unit">{u.icon}</div>
                   <div className="bs-slot-count">{u.name.split(' ')[0]} ×{st2.count}</div>
                   <div className="bs-slot-ctrl" onClick={(e) => e.stopPropagation()}>
-                    <button onClick={() => adjustSlot(sl.id, -10)}>−</button>
-                    <button onClick={() => adjustSlot(sl.id, +10)}>+</button>
+                    <button onClick={() => adjustSlot(sl.id, -100)}>−100</button>
+                    <button onClick={() => adjustSlot(sl.id, +100)}>+100</button>
                     <button onClick={() => clearSlot(sl.id)}>✕</button>
                   </div>
                 </>

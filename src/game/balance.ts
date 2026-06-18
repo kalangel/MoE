@@ -1,4 +1,4 @@
-import { BUILDINGS, CAMP_REGEN_H, FACTIONS, RESEARCH, MARCH_SECONDS_PER_100PX, BOT_REGEN_H } from './config';
+import { BUILDINGS, CAMP_REGEN_H, FACTIONS, RESEARCH, MARCH_SECONDS_PER_100PX, BOT_REGEN_H, GATHER_BASE_CAPACITY } from './config';
 import { unitById } from './units';
 import { paragonMultipliers, paragonSpent } from './paragon';
 import type { Bot, BuildingDef, BuildingId, Camp, GameState, Resource, Resources, UnitDef } from './types';
@@ -120,8 +120,28 @@ export function powerBreakdown(s: GameState): Record<string, number> {
 }
 
 export function marchCapacity(s: GameState): number {
-  const base = 50 + (s.buildings.castle ?? 1) * 25;
+  // Лимит отряда растянут под 30 уровней Замка (раньше потолок был под 12 ур.).
+  const base = 100 + (s.buildings.castle ?? 1) * 40;
   return Math.floor(base * FACTIONS[s.faction].marchBonus);
+}
+
+/** Эра армии по уровню Замка: I…V (5 эр на 30 уровней). */
+export function eraOf(s: GameState): number {
+  const lvl = s.buildings.castle ?? 1;
+  return Math.min(5, Math.max(1, Math.ceil(lvl / 6)));
+}
+
+/**
+ * Грузоподъёмность грабежа/сбора зависит от Эры нападающей армии.
+ * Эра I → ×1, далее по +60% за эру: армия более высокой Эры выносит склады в разы быстрее.
+ */
+export function eraLootMult(s: GameState): number {
+  return 1 + (eraOf(s) - 1) * 0.6;
+}
+
+/** Объём ресурсов, который армия увозит за один рейс мирного сбора (зависит от Эры). */
+export function gatherCapacity(s: GameState, nodeLevel: number): number {
+  return Math.round(GATHER_BASE_CAPACITY * (0.7 + nodeLevel * 0.3) * eraLootMult(s));
 }
 
 // ---------- Боты ----------

@@ -70,7 +70,7 @@ export default function ArmyView() {
       {/* найм */}
       <div className="section-title">Найм войск {(s.buildings.barracks ?? 0) < 1 && '— построй Казармы!'}</div>
       {f.units.map((u) => {
-        const count = counts[u.id] ?? 10;
+        const count = counts[u.id] ?? 100;
         const cost: Partial<Resources> = {};
         for (const [r, v] of Object.entries(u.cost)) cost[r as Resource] = (v as number) * count;
         const affordable = canAfford(s.resources, cost);
@@ -92,9 +92,9 @@ export default function ArmyView() {
             </div>
             <div className="row between" style={{ marginTop: 10, flexWrap: 'wrap', gap: 8 }}>
               <div className="count-stepper">
-                <button onClick={() => setCounts({ ...counts, [u.id]: Math.max(1, count - 10) })}>−</button>
-                <input value={count} onChange={(e) => setCounts({ ...counts, [u.id]: Math.max(1, parseInt(e.target.value) || 1) })} />
-                <button onClick={() => setCounts({ ...counts, [u.id]: count + 10 })}>+</button>
+                <button onClick={() => setCounts({ ...counts, [u.id]: Math.max(100, count - 100) })}>−100</button>
+                <input value={count} onChange={(e) => setCounts({ ...counts, [u.id]: Math.max(100, parseInt(e.target.value) || 100) })} />
+                <button onClick={() => setCounts({ ...counts, [u.id]: count + 100 })}>+100</button>
               </div>
               <div className="cost-row" style={{ margin: 0 }}>
                 {Object.entries(cost).map(([r, v]) => (

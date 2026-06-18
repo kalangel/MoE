@@ -77,6 +77,9 @@ export interface TrainTask extends QueueItem {
 
 export type TargetKind = 'castle' | 'camp' | 'player';
 
+/** Тип марша: атака/рейд или мирный сбор ресурсов с плитки. */
+export type MarchKind = 'attack' | 'gather';
+
 /** Снимок вражеского игрока на момент отправки марша (для офлайн-резолва PvP). */
 export interface EnemySnapshot {
   id: string;
@@ -93,6 +96,58 @@ export interface MarchTask extends QueueItem {
   units: Record<string, number>;
   formationId: string;
   enemy?: EnemySnapshot; // только для targetKind === 'player'
+  kind?: MarchKind;      // 'attack' (по умолчанию) | 'gather'
+  returning?: boolean;   // марш отозван/возвращается — без боя, армия идёт домой
+  origin?: { x: number; y: number }; // позиция замка на момент отправки (для отрисовки возврата)
+  dest?: { x: number; y: number };   // цель (для сбора ресурсов и точек без объекта)
+  resourceNodeId?: string;           // для gather: id ресурсной плитки
+  gathered?: Partial<Resources>;     // ресурсы, добытые в gather-марше (везутся домой)
+}
+
+/** Входящий рейд врага на замок игрока (с таймером марша — можно успеть поставить щит). */
+export interface IncomingAttack extends QueueItem {
+  raiderId: string;
+  raiderName: string;
+  power: number;       // снимок силы рейда
+  fromX: number;
+  fromY: number;
+  online?: boolean;
+}
+
+export type ResourceNodeKind = 'silver' | 'wood' | 'iron' | 'food';
+
+/** Мирная точка добычи ресурсов на карте мира (фарм плиток). */
+export interface ResourceNode {
+  id: string;
+  kind: ResourceNodeKind;
+  level: number;
+  x: number;
+  y: number;
+  amount: number;      // сколько ресурсов осталось в плитке
+  busyUntil: number;   // занята сбором до этого времени (0 = свободна)
+}
+
+// ---- Клубы (бывший «Союз») ----
+export type ClubType = 'open' | 'moderated';
+export type ClubRank = 'prince' | 'general' | 'diplomat' | 'officer' | 'recruit';
+
+export interface ClubMember {
+  id: string;
+  name: string;
+  rank: ClubRank;
+  power: number;
+  online: boolean;
+  npc?: boolean;
+}
+
+export interface ClubState {
+  id: string;
+  name: string;
+  tag: string;
+  type: ClubType;
+  description: string;
+  myRank: ClubRank;
+  members: ClubMember[];
 }
 
 export type ScoutKind = 'recon' | 'spy';
@@ -189,9 +244,11 @@ export interface GameState {
   researchQueue: ResearchTask[];
   trainQueue: TrainTask[];
   marches: MarchTask[];
+  incomingAttacks: IncomingAttack[];
   reconMissions: ReconMission[];
   bots: Bot[];
   camps: Camp[];
+  resourceNodes: ResourceNode[];
   playerPos: { x: number; y: number };
   shieldUntil: number;
   freeShieldCooldownUntil: number;
@@ -217,4 +274,6 @@ export interface GameState {
   lotteryDate: string;   // YYYY-MM-DD последнего розыгрыша
   mailSeen: number;      // timestamp последнего просмотра почты
   onlinePlaced: boolean; // замок уже размещён в общем мире (рандомная позиция выдана)
+  starterClaimed: Record<string, boolean>; // полученные награды стартовой цепочки квестов
+  club: ClubState | null; // текущий клуб игрока (null = не состоит ни в одном)
 }

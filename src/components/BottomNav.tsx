@@ -21,7 +21,7 @@ export default function BottomNav() {
       <Medallion icon="🏰" label="Город" size={44} active={onCity} onClick={() => ui.setScreen('kingdom')} />
       <Medallion icon="⚔" label="Кампания" size={44} badge={claimable} active={p === 'campaign'} onClick={() => ui.openPage('campaign')} />
       <Medallion icon="🗡️" label="Армия" size={44} badge={s.trainQueue.length} active={p === 'army'} onClick={() => ui.openPage('army')} />
-      <Medallion icon="🛡️" label="Союз" size={44} badge={20} active={p === 'alliance'} onClick={() => ui.openPage('alliance')} />
+      <Medallion icon="🏛️" label="Клуб" size={44} badge={s.club ? s.club.members.length : 0} active={p === 'alliance'} onClick={() => ui.openPage('alliance')} />
       <Medallion icon="🧰" label="Предметы" size={44} badge={itemCount} active={p === 'items'} onClick={() => ui.openPage('items')} />
       <Medallion icon="✉️" label="Почта" size={44} badge={unread} active={p === 'mail'} onClick={() => ui.openPage('mail')} />
       <Medallion icon="🪖" label="Профиль" size={44} active={p === 'profile'} onClick={() => ui.openPage('profile')} />
