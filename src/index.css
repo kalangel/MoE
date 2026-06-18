@@ -1828,3 +1828,72 @@ body { background: #d8c8a3; }
 }
 .bs-plan:disabled { opacity: 0.45; cursor: not-allowed; }
 .bs-plan.sel { background: #d0b878; border-color: var(--gold-dk); color: #2a1f08; }
+
+/* ===== Входящая атака: мигающая красная обводка экрана ===== */
+.threat-border {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 250;
+  border: 6px solid rgba(255, 60, 60, 0.0);
+  box-shadow: inset 0 0 70px 14px rgba(255, 40, 40, 0.0);
+  animation: threatPulse 1s ease-in-out infinite;
+}
+@keyframes threatPulse {
+  0%, 100% { border-color: rgba(220, 50, 50, 0.18); box-shadow: inset 0 0 50px 8px rgba(210, 40, 40, 0.16); }
+  50%      { border-color: rgba(230, 50, 50, 0.85); box-shadow: inset 0 0 90px 22px rgba(220, 40, 40, 0.45); }
+}
+
+/* ===== Уведомление (notice) ===== */
+.notice-bar {
+  position: fixed;
+  top: 70px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 400;
+  max-width: 90vw;
+  background: #3a1414;
+  color: #ffd9d9;
+  border: 1px solid var(--red);
+  border-radius: 10px;
+  padding: 10px 16px;
+  font-size: 13px;
+  font-weight: 600;
+  box-shadow: 0 6px 20px rgba(0,0,0,0.4);
+  cursor: pointer;
+  animation: noticeIn 0.2s ease-out;
+}
+@keyframes noticeIn { from { opacity: 0; transform: translate(-50%, -8px); } to { opacity: 1; transform: translate(-50%, 0); } }
+
+/* ===== Клубы ===== */
+.club-form { display: flex; gap: 8px; }
+.club-form .club-input:first-child { flex: 1; width: auto; }
+.club-input, .club-textarea {
+  background: #fffdf6;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  color: #2a2113;
+  padding: 8px 10px;
+  font-size: 13px;
+  font-family: inherit;
+}
+.club-input { width: 90px; }
+.club-textarea { width: 100%; min-height: 64px; resize: vertical; }
+.club-select {
+  background: #fffdf6;
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  color: #2a2113;
+  padding: 4px 6px;
+  font-size: 12px;
+}
+.club-rank-badge {
+  background: #f3e7c4;
+  border: 1px solid var(--gold-dk);
+  color: var(--gold-lt);
+  border-radius: 999px;
+  padding: 4px 10px;
+  font-size: 12px;
+  font-weight: 700;
+  white-space: nowrap;
+}

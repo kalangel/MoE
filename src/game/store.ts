@@ -4,16 +4,17 @@ import {
   BUILDINGS, CAMP_SEEDS, DAILY_QUESTS, EMBASSY_COOLDOWN_H, EMBASSY_HELP_MIN_PER_LVL,
   FACTIONS, FACTION_CHANGE_COST, FREE_SHIELD_COOLDOWN_H, ITEM_DEFS, LOTTERY_PRIZES,
   PLAYER_POS, PLAYER_RAID_SAFE_POWER, RECON_COST_SILVER, RECON_MAX_S, RECON_MIN_S, RESEARCH,
-  RESOURCE_BUILDING_IDS, RESOURCE_ZONE_SIZE,
-  SHIELDS, SPEEDUP_GOLD_PER_MIN, SPY_COST_SILVER, SPY_MIN_S, START_INVENTORY, START_RESOURCES,
+  RESOURCE_BUILDING_IDS, RESOURCE_NODE_META, RESOURCE_NODE_SEEDS, RESOURCE_ZONE_SIZE,
+  SHIELDS, SPEEDUP_GOLD_PER_MIN, SPY_COST_SILVER, SPY_MIN_S, STARTER_QUESTS, START_INVENTORY, START_RESOURCES,
   TELEPORT_COST_GOLD, TEMPLE_COOLDOWN_H,
 } from './config';
 import {
   HOUR, armyAttack, armyDefense, botEffectivePower, buildingCost, buildingTimeMs,
-  campEffectivePower, canAfford, effectivePower, foodUpkeepPerHour, marchTimeMs,
-  paragonAttackMult, productionPerHour, researchSpeedMult, scoutTimeMs, todayKey,
-  trainSpeedMult, uid, unitDef,
+  campEffectivePower, canAfford, effectivePower, eraLootMult, foodUpkeepPerHour, gatherCapacity,
+  marchTimeMs, paragonAttackMult, powerBreakdown, productionPerHour, researchSpeedMult, scoutTimeMs,
+  todayKey, trainSpeedMult, uid, unitDef,
 } from './balance';
+import { canActOn, hasPerm, joinSeed, joinableClubs, makeClub, RANK_META } from './clubs';
 import { attackPower, compositionCounts, defenderComposition, FORMATIONS } from './units';
 import {
   PARAGON_ABILITIES, PARAGON_CASTLE_REQ, availablePoints, nodeCost, nodeUnlocked,
@@ -33,9 +34,9 @@ import {
   academyNodeUnlocked, eraMarchFactor, eraResearchable,
 } from './academy';
 import type {
-  BattleLayout, BattleReport, Bot, BuildingId, Camp, EnemySnapshot, EquipSlot, FactionId, GameState,
-  HeroId, HeroInstance, HeroSystemData, LogEntry, MarchTask, ResearchId, Resource, ResourceBuildingId,
-  ResourcePlot, Resources, ScoutKind, TargetKind,
+  BattleLayout, BattleReport, Bot, BuildingId, Camp, ClubRank, ClubType, EnemySnapshot, EquipSlot,
+  FactionId, GameState, HeroId, HeroInstance, HeroSystemData, IncomingAttack, LogEntry, MarchTask,
+  ResearchId, Resource, ResourceBuildingId, ResourceNode, ResourcePlot, Resources, ScoutKind, TargetKind,
 } from './types';
 
 const SAVE_KEY = 'march-of-empires-save-v1';
@@ -77,6 +78,9 @@ interface Actions {
   activateShield: (shieldId: string) => void;
   scout: (targetId: string, kind: ScoutKind) => void;
   sendAttack: (targetId: string, units: Record<string, number>, formationId: string) => void;
+  sendGather: (nodeId: string, units: Record<string, number>) => void;
+  recallMarch: (marchId: string) => void;
+  accelerateMarch: (marchId: string, itemId: string) => void;
   teleport: (x: number, y: number) => void;
   pray: () => void;
   embassyHelp: () => void;
@@ -89,9 +93,20 @@ interface Actions {
   useParagonAbility: (abilityId: string) => void;
   useItem: (itemId: string) => void;
   claimLottery: () => void;
+  claimStarter: (questId: string) => void;
   markMailSeen: () => void;
+  clearNotice: () => void;
   buyBattlePreset: (id: string) => void;
   saveBattleLayout: (id: string, layout: BattleLayout) => void;
+  // клубы
+  createClub: (name: string, tag: string, type: ClubType) => void;
+  joinClub: (seedId: string) => void;
+  leaveClub: () => void;
+  clubTransfer: (memberId: string) => void;
+  clubSetRank: (memberId: string, rank: ClubRank) => void;
+  clubKick: (memberId: string) => void;
+  clubSetDesc: (text: string) => void;
+  clubSetType: (type: ClubType) => void;
   // онлайн
   sendPlayerAttack: (enemy: EnemySnapshot, units: Record<string, number>, formationId: string) => void;
   applyEnemyAttack: (loot: Partial<Resources>, troopLoss: number, report: string) => void;
@@ -102,6 +117,7 @@ interface Actions {
 
 export interface Store extends GameState {
   pendingReport: BattleReport | null;
+  notice: string | null;
   actions: Actions;
 }
 
@@ -143,6 +159,10 @@ function refreshCamps(maxLevel: number): Camp[] {
     });
   }
   return camps;
+}
+
+function makeResourceNodes(): ResourceNode[] {
+  return RESOURCE_NODE_SEEDS.map((seed) => ({ ...seed, busyUntil: 0 }));
 }
 
 export function campName(level: number): string {
@@ -230,9 +250,11 @@ export function freshState(now: number): GameState {
     researchQueue: [],
     trainQueue: [],
     marches: [],
+    incomingAttacks: [],
     reconMissions: [],
     bots: makeBots(now),
     camps: makeCamps(),
+    resourceNodes: makeResourceNodes(),
     playerPos: { ...PLAYER_POS },
     shieldUntil: 0,
     freeShieldCooldownUntil: 0,
@@ -259,6 +281,8 @@ export function freshState(now: number): GameState {
     lotteryDate: '',
     mailSeen: now,
     onlinePlaced: false,
+    starterClaimed: {},
+    club: null,
   };
 }
 
@@ -298,6 +322,10 @@ function loadState(): GameState {
         nextCampRefreshAt: parsed.nextCampRefreshAt ?? (now + 10 * 60_000),
         battlePresets: parsed.battlePresets ?? ['default'],
         battleLayouts: parsed.battleLayouts ?? {},
+        incomingAttacks: parsed.incomingAttacks ?? [],
+        resourceNodes: parsed.resourceNodes ?? fresh.resourceNodes,
+        starterClaimed: parsed.starterClaimed ?? {},
+        club: parsed.club ?? null,
       } as GameState;
     }
   } catch (e) {
@@ -448,17 +476,109 @@ function completeQueues(s: GameState, now: number, offline: boolean): BattleRepo
       completeScout(s, r.targetId, r.kind, r.endsAt);
     }
   }
-  // Походы — бой при прибытии
+  // Походы — бой / сбор / возврат при прибытии
   for (const m of [...s.marches]) {
-    if (m.endsAt <= now) {
-      s.marches = s.marches.filter((x) => x.id !== m.id);
-      const r = m.targetKind === 'player' && m.enemy
-        ? resolvePlayerBattle(s, m.enemy, m.units, m.formationId, m.endsAt)
-        : resolveBattle(s, m.targetId, m.units, m.formationId, m.endsAt);
-      if (r && !offline) report = r;
+    if (m.endsAt > now) continue;
+    s.marches = s.marches.filter((x) => x.id !== m.id);
+
+    if (m.returning) {
+      // Армия вернулась домой — возвращаем войска (и довезённые ресурсы)
+      for (const [id, n] of Object.entries(m.units)) s.army[id] = (s.army[id] ?? 0) + n;
+      if (m.gathered && Object.keys(m.gathered).length) {
+        let sum = 0;
+        for (const [r, v] of Object.entries(m.gathered)) { s.resources[r as Resource] += v as number; sum += v as number; }
+        s.stats.lootedResources += sum;
+        pushLog(s, '🌾', `Сборщики вернулись с ресурсами: ${fmtLoot(m.gathered)}`, 'gold', m.endsAt);
+      } else {
+        pushLog(s, '🏳️', 'Армия вернулась в замок без боя.', 'info', m.endsAt);
+      }
+      continue;
     }
+
+    if (m.kind === 'gather') {
+      // Прибыли к ресурсной плитке: добываем и сразу разворачиваемся домой
+      const node = s.resourceNodes.find((n) => n.id === m.resourceNodeId);
+      const gathered = harvestNode(s, node, m.endsAt);
+      const home = m.origin ?? s.playerPos;
+      const dest = m.dest ?? (node ? { x: node.x, y: node.y } : home);
+      const dur = Math.max(8000, marchTimeMs(dest, home));
+      s.marches.push({
+        ...m, id: uid(), returning: true, gathered, origin: home, dest,
+        startedAt: m.endsAt, endsAt: m.endsAt + dur,
+      });
+      continue;
+    }
+
+    // Обычный поход — бой
+    const r = m.targetKind === 'player' && m.enemy
+      ? resolvePlayerBattle(s, m.enemy, m.units, m.formationId, m.endsAt)
+      : resolveBattle(s, m.targetId, m.units, m.formationId, m.endsAt);
+    if (r && !offline) report = r;
+  }
+
+  // Входящие рейды — удар при прибытии (или отмена щитом)
+  for (const ia of [...s.incomingAttacks]) {
+    if (ia.endsAt > now) continue;
+    s.incomingAttacks = s.incomingAttacks.filter((x) => x.id !== ia.id);
+    const r = resolveIncomingRaid(s, ia, ia.endsAt);
+    if (r && !offline) report = r;
   }
   return report;
+}
+
+/** Мирный сбор: армия забирает ресурсы из плитки (объём зависит от Эры). */
+function harvestNode(s: GameState, node: ResourceNode | undefined, at: number): Partial<Resources> {
+  if (!node) return {};
+  const cap = gatherCapacity(s, node.level);
+  const got = Math.min(cap, node.amount);
+  node.amount = Math.max(0, node.amount - got);
+  node.busyUntil = 0;
+  if (got <= 0) return {};
+  pushLog(s, RESOURCE_NODE_META[node.kind].icon, `Добыто на плитке: ${RESOURCE_NODE_META[node.kind].name} +${got}`, 'info', at);
+  return { [node.kind]: got } as Partial<Resources>;
+}
+
+/** Разрешение входящего рейда: сейв щитом или удар по замку (реалтайм-списание). */
+function resolveIncomingRaid(s: GameState, ia: IncomingAttack, now: number): BattleReport | null {
+  // Сейв щитом: успел поставить щит до удара — атака отменяется без боя
+  if (s.shieldUntil > now) {
+    s.stats.raidsRepelled += 1;
+    pushLog(s, '🛡️', `Щит спас! ${ia.raiderName} развернул войско без боя.`, 'raid', now);
+    pushChronicle(s, '🛡️', `${ia.raiderName} отозвал рейд: замок игрока под щитом`, now);
+    return null;
+  }
+  const myDef = armyDefense(s, s.army, now) * 1.15 + 80;
+  const raidPower = ia.power;
+  if (myDef >= raidPower) {
+    for (const [id, n] of Object.entries(s.army)) {
+      const lost = Math.floor(n * 0.04);
+      if (lost > 0) s.army[id] = n - lost;
+    }
+    const gold = 8 + Math.floor(Math.random() * 12);
+    s.resources.gold += gold;
+    s.stats.raidsRepelled += 1;
+    pushLog(s, '🛡️', `${ia.raiderName} напал на твой замок — атака отбита! +${gold} золота`, 'raid', now);
+    pushChronicle(s, '🛡️', `${ia.raiderName} безуспешно штурмовал твой замок`, now);
+    return { win: false, attackerPower: Math.round(raidPower), defenderPower: Math.round(myDef), losses: {}, enemyName: ia.raiderName, loot: {} };
+  }
+  // Поражение игрока: реалтайм-списание войск и ресурсов
+  const losses: Record<string, number> = {};
+  for (const [id, n] of Object.entries(s.army)) {
+    const lost = Math.ceil(n * 0.14);
+    losses[id] = lost;
+    s.stats.lostTroops += lost;
+    s.army[id] = Math.max(0, n - lost);
+    if (s.army[id] <= 0) delete s.army[id];
+  }
+  s.stats.raidsSuffered += 1;
+  const loot: Partial<Resources> = {};
+  for (const r of ['iron', 'wood', 'silver', 'food'] as Resource[]) {
+    loot[r] = Math.floor(s.resources[r] * 0.18);
+    s.resources[r] = Math.max(0, s.resources[r] - (loot[r] as number));
+  }
+  pushLog(s, '🔥', `${ia.raiderName} разграбил твой замок! Поставь щит.`, 'raid', now);
+  pushChronicle(s, '🔥', `${ia.raiderName} разграбил замок игрока`, now);
+  return { win: false, attackerPower: Math.round(raidPower), defenderPower: Math.round(myDef), losses, enemyName: ia.raiderName, loot };
 }
 
 /** Сила атаки игрока с учётом формации, контр-системы, исследований и благословения. */
@@ -517,7 +637,8 @@ function resolveBattle(
     const kills = Math.round(def / 24);
     s.stats.killedTroops += kills;
     addHeroExp(s, kills * (1 + level)); // опыт чемпиона — за каждого убитого бойца
-    const lootBonus = 1 + paragonMultipliers(s).loot + academyBuffs(s).loot;
+    // Грузоподъёмность грабежа зависит от Эры армии: выше Эра — больше выносим
+    const lootBonus = (1 + paragonMultipliers(s).loot + academyBuffs(s).loot) * eraLootMult(s);
 
     if (isCamp) {
       // Таблица лута лагеря: одна из наград (золото / предмет / сундук / редкое)
@@ -587,7 +708,7 @@ function resolvePlayerBattle(
   const loot: Partial<Resources> = {};
   if (win) {
     const lvl = Math.max(1, Math.round(enemy.power / 400));
-    const lootBonus = 1 + paragonMultipliers(s).loot + academyBuffs(s).loot;
+    const lootBonus = (1 + paragonMultipliers(s).loot + academyBuffs(s).loot) * eraLootMult(s);
     loot.gold = Math.round((10 + lvl * 8) * lootBonus);
     loot.iron = Math.round(120 * lvl * (0.7 + Math.random() * 0.6) * lootBonus);
     loot.wood = Math.round(120 * lvl * (0.7 + Math.random() * 0.6) * lootBonus);
@@ -767,55 +888,35 @@ function botActStep(s: GameState, now: number) {
   }
 }
 
-/** Возможный рейд бота на игрока (с защитой новичка). */
-function maybePlayerRaid(s: GameState, now: number): BattleReport | null {
-  if (s.shieldUntil > now) return null; // под щитом — неприкосновенен
+/**
+ * Возможный рейд бота на игрока (с защитой новичка). Рейд НЕ резолвится мгновенно:
+ * планируется входящая атака с таймером марша — игрок видит красный экран и успевает
+ * поставить Щит мира, чтобы развернуть врага без боя.
+ */
+function maybePlayerRaid(s: GameState, now: number): void {
+  if (s.shieldUntil > now) return;          // под щитом — рейд не стартует
+  if (s.incomingAttacks.length > 0) return; // уже летит один рейд — не накапливаем
   const myStrength = playerStrength(s, now);
-  if (myStrength < PLAYER_RAID_SAFE_POWER) return null; // новичка почти не трогают
+  if (myStrength < PLAYER_RAID_SAFE_POWER) return; // новичка почти не трогают
 
-  // Кандидаты — открытые боты, что сильнее моей обороны и достаточно близко по силе
   const candidates = s.bots.filter((b) => b.shieldUntil <= now);
-  if (!candidates.length) return null;
+  if (!candidates.length) return;
   const raider = candidates[Math.floor(Math.random() * candidates.length)];
 
-  // Шанс рейда растёт с моим богатством/силой, падает если я заметно сильнее рейдера
   const ratio = botPower(raider, now) / Math.max(1, myStrength);
   const baseChance = 0.18 + Math.min(0.4, myStrength / 8000);
   const chance = baseChance * Math.min(1.4, ratio + 0.3);
-  if (Math.random() > chance) return null;
+  if (Math.random() > chance) return;
 
-  const myDef = armyDefense(s, s.army, now) * 1.15 + 80;
   const raidPower = botPower(raider, now) * (0.45 + Math.random() * 0.5);
-  if (myDef >= raidPower) {
-    for (const [id, n] of Object.entries(s.army)) {
-      const lost = Math.floor(n * 0.04);
-      if (lost > 0) s.army[id] = n - lost;
-    }
-    const gold = 8 + Math.floor(Math.random() * 12);
-    s.resources.gold += gold;
-    s.stats.raidsRepelled += 1;
-    pushLog(s, '🛡️', `${raider.name} напал на твой замок — атака отбита! +${gold} золота`, 'raid', now);
-    pushChronicle(s, '🛡️', `${raider.name} безуспешно штурмовал твой замок`, now);
-    return { win: false, attackerPower: Math.round(raidPower), defenderPower: Math.round(myDef), losses: {}, enemyName: raider.name, loot: {} };
-  }
-  // Поражение игрока: потери войск и ресурсов
-  const losses: Record<string, number> = {};
-  for (const [id, n] of Object.entries(s.army)) {
-    const lost = Math.ceil(n * 0.14);
-    losses[id] = lost;
-    s.stats.lostTroops += lost;
-    s.army[id] = Math.max(0, n - lost);
-    if (s.army[id] <= 0) delete s.army[id];
-  }
-  s.stats.raidsSuffered += 1;
-  const loot: Partial<Resources> = {};
-  for (const r of ['iron', 'wood', 'silver', 'food'] as Resource[]) {
-    loot[r] = Math.floor(s.resources[r] * 0.18);
-    s.resources[r] = Math.max(0, s.resources[r] - (loot[r] as number));
-  }
-  pushLog(s, '🔥', `${raider.name} разграбил твой замок! Поставь щит.`, 'raid', now);
-  pushChronicle(s, '🔥', `${raider.name} разграбил замок игрока`, now);
-  return { win: false, attackerPower: Math.round(raidPower), defenderPower: Math.round(myDef), losses, enemyName: raider.name, loot };
+  // Время подлёта: по дистанции, но не меньше 25с — чтобы успеть среагировать
+  const travel = Math.max(25_000, marchTimeMs({ x: raider.x, y: raider.y }, s.playerPos));
+  s.incomingAttacks.push({
+    id: uid(), raiderId: raider.id, raiderName: raider.name, power: Math.round(raidPower),
+    fromX: raider.x, fromY: raider.y, startedAt: now, endsAt: now + travel,
+  });
+  pushLog(s, '🚨', `${raider.name} выступил в рейд на твой замок! Успей поставить Щит мира.`, 'raid', now);
+  pushChronicle(s, '🚨', `${raider.name} ведёт войско к замку игрока`, now);
 }
 
 // ---------- Главный тик (работает и для офлайн-дельты) ----------
@@ -838,8 +939,7 @@ function runTick(s: GameState, now: number): BattleReport | null {
     let aiGuard = 0;
     while (t >= s.nextBotActAt && aiGuard++ < 8) {
       botActStep(s, s.nextBotActAt);
-      const raid = maybePlayerRaid(s, s.nextBotActAt);
-      if (raid && !offline) report = raid;
+      maybePlayerRaid(s, s.nextBotActAt);
       s.nextBotActAt += (BOT_ACT_MIN_M + Math.random() * (BOT_ACT_MAX_M - BOT_ACT_MIN_M)) * 60_000;
     }
   }
@@ -876,6 +976,7 @@ export const useGame = create<Store>((set, get) => {
   return {
     ...initial,
     pendingReport: null,
+    notice: null,
 
     actions: {
       tick: (now) => {
@@ -894,7 +995,7 @@ export const useGame = create<Store>((set, get) => {
         s.onboarded = false;
         s.tutorialStep = 'intro'; // запускаем стартовый онбординг ресурсной зоны
         pushLog(s, '👑', `Добро пожаловать, ${s.playerName}! Империя ${FACTIONS[faction].name} ждёт.`, 'info');
-        set({ ...s, pendingReport: null });
+        set({ ...s, pendingReport: null, notice: null });
         persist(s, true);
       },
 
@@ -1120,10 +1221,19 @@ export const useGame = create<Store>((set, get) => {
         void report;
       }),
 
-      activateShield: (shieldId) => mutate((s) => {
+      activateShield: (shieldId) => {
+        const s = structuredClone(snapshot(get()));
         const def = SHIELDS.find((x) => x.id === shieldId);
         if (!def) return;
         const now = Date.now();
+        // Запрет: нельзя ставить щит, пока хоть одна армия в атакующем походе на игрока/бота.
+        // Мирный сбор ресурсов (gather) этому НЕ мешает — щит остаётся доступен.
+        const attacking = s.marches.some((m) =>
+          !m.returning && m.kind !== 'gather' && (m.targetKind === 'player' || m.targetKind === 'castle'));
+        if (attacking) {
+          set({ notice: 'Нельзя активировать щит во время атакующего похода!' });
+          return;
+        }
         if (def.costGold === 0) {
           if (s.freeShieldCooldownUntil > now) return;
           s.freeShieldCooldownUntil = now + FREE_SHIELD_COOLDOWN_H * HOUR;
@@ -1131,10 +1241,11 @@ export const useGame = create<Store>((set, get) => {
           if (s.resources.gold < def.costGold) return;
           s.resources.gold -= def.costGold;
         }
-        s.shieldUntil = Math.max(s.shieldUntil, now) ;
         s.shieldUntil = now + def.hours * HOUR;
         pushLog(s, '🛡️', `Щит активирован: ${def.name} (${def.hours} ч)`, 'info');
-      }),
+        set({ ...s, notice: null });
+        persist(s, true);
+      },
 
       scout: (targetId, kind) => mutate((s) => {
         const target = findTarget(s, targetId);
@@ -1182,9 +1293,66 @@ export const useGame = create<Store>((set, get) => {
           pushLog(s, '⚠️', 'Твой щит снят: ты начал атаку.', 'info');
         }
         const dur = marchTimeMs(s.playerPos, pos, (1 + heroBuffs(s).marchSpeed + academyBuffs(s).marchSpeed) * eraMarchFactor(s));
-        s.marches.push({ id: uid(), targetId, targetKind: target.kind, units, formationId, startedAt: now, endsAt: now + dur });
+        s.marches.push({ id: uid(), targetId, targetKind: target.kind, units, formationId, kind: 'attack', origin: { ...s.playerPos }, dest: { x: pos.x, y: pos.y }, startedAt: now, endsAt: now + dur });
         const label = target.kind === 'camp' ? campName(target.camp!.level) : `замку ${target.bot!.name}`;
         pushLog(s, '🐎', `Армия выступила к ${label}`, 'battle');
+      }),
+
+      sendGather: (nodeId, units) => mutate((s) => {
+        const node = s.resourceNodes.find((n) => n.id === nodeId);
+        if (!node) return;
+        const now = Date.now();
+        if (node.busyUntil > now || node.amount <= 0) return;
+        const total = Object.values(units).reduce((a, b) => a + b, 0);
+        if (total <= 0) return;
+        for (const [id, n] of Object.entries(units)) if ((s.army[id] ?? 0) < n) return;
+        for (const [id, n] of Object.entries(units)) {
+          s.army[id] -= n;
+          if (s.army[id] <= 0) delete s.army[id];
+        }
+        const dur = marchTimeMs(s.playerPos, node, (1 + heroBuffs(s).marchSpeed + academyBuffs(s).marchSpeed) * eraMarchFactor(s));
+        node.busyUntil = now + dur;
+        // Мирный сбор НЕ снимает щит — игрок остаётся в безопасности, пока армия фармит.
+        s.marches.push({
+          id: uid(), targetId: nodeId, targetKind: 'camp', units, formationId: 'balanced',
+          kind: 'gather', resourceNodeId: nodeId, origin: { ...s.playerPos }, dest: { x: node.x, y: node.y },
+          startedAt: now, endsAt: now + dur,
+        });
+        pushLog(s, RESOURCE_NODE_META[node.kind].icon, `Сборщики отправлены к точке: ${RESOURCE_NODE_META[node.kind].name}`, 'info');
+      }),
+
+      recallMarch: (marchId) => mutate((s) => {
+        const now = Date.now();
+        const m = s.marches.find((x) => x.id === marchId);
+        if (!m || m.returning) return;
+        const elapsed = Math.max(0, now - m.startedAt);
+        const dur = Math.max(8000, elapsed); // обратный путь ≈ пройденному
+        m.returning = true;
+        m.startedAt = now;
+        m.endsAt = now + dur;
+        // Освобождаем ресурсную плитку, если армия-сборщик не доехала
+        if (m.kind === 'gather' && m.resourceNodeId) {
+          const node = s.resourceNodes.find((n) => n.id === m.resourceNodeId);
+          if (node) node.busyUntil = 0;
+        }
+        pushLog(s, '↩️', 'Поход отозван — армия разворачивается домой.', 'info');
+      }),
+
+      accelerateMarch: (marchId, itemId) => mutate((s) => {
+        const m = s.marches.find((x) => x.id === marchId);
+        if (!m) return;
+        const def = ITEM_DEFS.find((i) => i.id === itemId);
+        if (!def || def.kind !== 'marchspeed') return;
+        if ((s.inventory[itemId] ?? 0) <= 0) return;
+        const now = Date.now();
+        const remain = m.endsAt - now;
+        if (remain <= 0) return;
+        let cut = 0;
+        if (def.marchCutPct) cut = remain * def.marchCutPct;
+        if (def.marchCutMin) cut = Math.max(cut, def.marchCutMin * 60_000);
+        m.endsAt = Math.max(now, m.endsAt - cut);
+        s.inventory[itemId] -= 1;
+        pushLog(s, def.icon, `Марш ускорен: ${def.name}`, 'info');
       }),
 
       teleport: (x, y) => mutate((s) => {
@@ -1349,7 +1517,94 @@ export const useGame = create<Store>((set, get) => {
         pushLog(s, '🎰', `Лотерея: выигрыш — ${prize.label}!`, 'gold');
       }),
 
+      claimStarter: (questId) => mutate((s) => {
+        const def = STARTER_QUESTS.find((q) => q.id === questId);
+        if (!def) return;
+        if (s.starterClaimed[questId]) return;
+        if (!def.check(s)) return;
+        s.starterClaimed[questId] = true;
+        const r = def.reward;
+        if (r.iron) s.resources.iron += r.iron;
+        if (r.wood) s.resources.wood += r.wood;
+        if (r.silver) s.resources.silver += r.silver;
+        if (r.food) s.resources.food += r.food;
+        if (r.gold) s.resources.gold += r.gold;
+        if (r.items) for (const [id, n] of Object.entries(r.items)) s.inventory[id] = (s.inventory[id] ?? 0) + n;
+        addParagon(s, 60);
+        addHeroExp(s, 60);
+        pushLog(s, def.icon, `Стартовый квест «${def.name}» выполнен — награда получена!`, 'gold');
+      }),
+
       markMailSeen: () => mutate((s) => { s.mailSeen = Date.now(); }, false),
+
+      clearNotice: () => set({ notice: null }),
+
+      // ---------- Клубы ----------
+      createClub: (name, tag, type) => mutate((s) => {
+        if (s.club) return;
+        s.club = makeClub(name, tag, type, s.playerName, Math.round(powerBreakdown(s).total));
+        pushLog(s, '🏛️', `Клуб «${s.club.name}» [${s.club.tag}] создан. Ты — Князь!`, 'info');
+      }),
+
+      joinClub: (seedId) => mutate((s) => {
+        if (s.club) return;
+        const seed = joinableClubs().find((c) => c.id === seedId);
+        if (!seed) return;
+        s.club = joinSeed(seed, s.playerName, Math.round(powerBreakdown(s).total));
+        pushLog(s, '🤝', `Ты вступил в клуб «${seed.name}» как Рекрут.`, 'info');
+      }),
+
+      leaveClub: () => mutate((s) => {
+        if (!s.club) return;
+        const name = s.club.name;
+        s.club = null;
+        pushLog(s, '🚪', `Ты покинул клуб «${name}».`, 'info');
+      }),
+
+      clubTransfer: (memberId) => mutate((s) => {
+        const c = s.club;
+        if (!c || c.myRank !== 'prince') return;
+        const target = c.members.find((m) => m.id === memberId);
+        const me = c.members.find((m) => m.id === 'me');
+        if (!target || !me || target.id === 'me') return;
+        target.rank = 'prince';
+        me.rank = 'general';
+        c.myRank = 'general';
+        pushLog(s, '👑', `Титул Князя передан игроку ${target.name}. Ты теперь Военный генерал.`, 'info');
+      }),
+
+      clubSetRank: (memberId, rank) => mutate((s) => {
+        const c = s.club;
+        if (!c || !hasPerm(c.myRank, 'manageRanks')) return;
+        if (rank === 'prince') return; // титул Князя — только через передачу
+        const target = c.members.find((m) => m.id === memberId);
+        if (!target || target.id === 'me') return;
+        if (!canActOn(c.myRank, target.rank)) return;
+        target.rank = rank;
+        pushLog(s, RANK_META[rank].icon, `${target.name} назначен на ранг «${RANK_META[rank].name}».`, 'info');
+      }),
+
+      clubKick: (memberId) => mutate((s) => {
+        const c = s.club;
+        if (!c || !hasPerm(c.myRank, 'kick')) return;
+        const target = c.members.find((m) => m.id === memberId);
+        if (!target || target.id === 'me') return;
+        if (!canActOn(c.myRank, target.rank)) return;
+        c.members = c.members.filter((m) => m.id !== memberId);
+        pushLog(s, '🚫', `${target.name} исключён из клуба.`, 'info');
+      }),
+
+      clubSetDesc: (text) => mutate((s) => {
+        const c = s.club;
+        if (!c || !hasPerm(c.myRank, 'editDesc')) return;
+        c.description = text.slice(0, 240);
+      }),
+
+      clubSetType: (type) => mutate((s) => {
+        const c = s.club;
+        if (!c || c.myRank !== 'prince') return;
+        c.type = type;
+      }),
 
       // Купить комплект сортировки армии за золото.
       buyBattlePreset: (id) => mutate((s) => {
@@ -1383,7 +1638,7 @@ export const useGame = create<Store>((set, get) => {
           pushLog(s, '⚠️', 'Твой щит снят: ты начал атаку.', 'info');
         }
         const dur = marchTimeMs(s.playerPos, { x: enemy.x, y: enemy.y }, (1 + heroBuffs(s).marchSpeed + academyBuffs(s).marchSpeed) * eraMarchFactor(s));
-        s.marches.push({ id: uid(), targetId: enemy.id, targetKind: 'player', units, formationId, enemy, startedAt: now, endsAt: now + dur });
+        s.marches.push({ id: uid(), targetId: enemy.id, targetKind: 'player', units, formationId, enemy, kind: 'attack', origin: { ...s.playerPos }, dest: { x: enemy.x, y: enemy.y }, startedAt: now, endsAt: now + dur });
         pushLog(s, '🐎', `Армия выступила к замку лорда ${enemy.nick}`, 'battle');
       }),
 
@@ -1425,7 +1680,8 @@ export const useGame = create<Store>((set, get) => {
 });
 
 function snapshot(s: Store): GameState {
-  const { actions, pendingReport, ...data } = s;
+  const { actions, pendingReport, notice, ...data } = s;
+  void pendingReport; void notice;
   return data as GameState;
 }
 

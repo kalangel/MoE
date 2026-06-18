@@ -1,8 +1,8 @@
-import { BUILDINGS, CAMP_REGEN_H, FACTIONS, RESEARCH, MARCH_SECONDS_PER_100PX, BOT_REGEN_H, RESOURCE_BUILDING_IDS } from './config';
+import { BUILDINGS, CAMP_REGEN_H, FACTIONS, RESEARCH, MARCH_SECONDS_PER_100PX, BOT_REGEN_H, RESOURCE_BUILDING_IDS, GATHER_BASE_CAPACITY } from './config';
 import { unitById } from './units';
 import { paragonMultipliers, paragonSpent } from './paragon';
 import { BuffManager, heroBuffs, heroCommand } from './hero';
-import { academyBuffs, academyClassAtk, academyProdMult } from './academy';
+import { academyBuffs, academyClassAtk, academyProdMult, currentEra } from './academy';
 import type { Bot, BuildingDef, BuildingId, Camp, GameState, Resource, ResourceBuildingId, Resources, UnitDef } from './types';
 
 export const HOUR = 3600_000;
@@ -137,10 +137,24 @@ export function powerBreakdown(s: GameState): Record<string, number> {
 }
 
 export function marchCapacity(s: GameState): number {
-  const base = 50 + (s.buildings.castle ?? 1) * 25;
+  // Лимит отряда растянут под 30 уровней Замка (раньше потолок был под 12 ур.).
+  const base = 100 + (s.buildings.castle ?? 1) * 40;
   // Герой/Академия: % к вместимости + плоский бонус от атрибута «Командование».
   const mult = 1 + heroBuffs(s).marchCapacity + academyBuffs(s).marchCap;
   return Math.floor(base * FACTIONS[s.faction].marchBonus * mult) + heroCommand(s);
+}
+
+/**
+ * Грузоподъёмность грабежа/сбора зависит от Эры нападающей армии.
+ * Эра I → ×1, далее по +60% за эру: армия более высокой Эры выносит склады в разы быстрее.
+ */
+export function eraLootMult(s: GameState): number {
+  return 1 + (currentEra(s) - 1) * 0.6;
+}
+
+/** Объём ресурсов, который армия увозит за один рейс мирного сбора (зависит от Эры и Академии). */
+export function gatherCapacity(s: GameState, nodeLevel: number): number {
+  return Math.round(GATHER_BASE_CAPACITY * (0.7 + nodeLevel * 0.3) * eraLootMult(s) * (1 + academyBuffs(s).gather));
 }
 
 // ---------- Боты ----------

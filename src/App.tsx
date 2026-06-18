@@ -21,8 +21,9 @@ import Page from './components/Page';
 import ParagonPage from './components/windows/ParagonPage';
 import HeroPage from './components/windows/HeroPage';
 import ProfilePage from './components/windows/ProfilePage';
+import ClubsPage from './components/windows/ClubsPage';
 import {
-  AlliancePage, BookmarksWindow, FindWindow, ItemsPage, LeaderboardPage,
+  BookmarksWindow, FindWindow, ItemsPage, LeaderboardPage,
   LotteryPage, MailPage, PantheonWindow, RegionsWindow, SettingsPage, WorldsWindow,
 } from './components/windows/MiscWindows';
 
@@ -73,6 +74,8 @@ export default function App() {
 
   return (
     <div className="app">
+      <ThreatOverlay />
+      <NoticeBar />
       {ui.page ? (
         <PageRouter />
       ) : (
@@ -93,6 +96,24 @@ export default function App() {
   );
 }
 
+/** Мигающая красная обводка экрана при входящей атаке (индикатор угрозы). */
+function ThreatOverlay() {
+  const incoming = useGame((s) => s.incomingAttacks.length);
+  if (incoming <= 0) return null;
+  return <div className="threat-border" aria-hidden />;
+}
+
+/** Всплывающее уведомление об ошибке/действии (например, запрет щита при атаке). */
+function NoticeBar() {
+  const notice = useGame((s) => s.notice);
+  const clear = useGame((s) => s.actions.clearNotice);
+  useEffect(() => {
+    if (notice) { const t = setTimeout(clear, 3200); return () => clearTimeout(t); }
+  }, [notice, clear]);
+  if (!notice) return null;
+  return <div className="notice-bar" onClick={clear}>⚠️ {notice}</div>;
+}
+
 function PageRouter() {
   const page = useUI((s) => s.page);
   switch (page) {
@@ -102,7 +123,7 @@ function PageRouter() {
     case 'profile': return <ProfilePage />;
     case 'paragon': return <ParagonPage />;
     case 'hero': return <HeroPage />;
-    case 'alliance': return <AlliancePage />;
+    case 'alliance': return <ClubsPage />;
     case 'items': return <ItemsPage />;
     case 'mail': return <MailPage />;
     case 'leaderboard': return <LeaderboardPage />;
