@@ -26,7 +26,6 @@ const BUILDING_ALIASES: Record<string, BuildingId> = {
   silvermine: 'silverMine', silver: 'silverMine',
 };
 
-// ---------- Уровень доступа текущего игрока ----------
 export function consoleLevel(): Level {
   const os = useOnlineStore.getState();
   const localDev = typeof localStorage !== 'undefined' && localStorage.getItem('moe-dev') === '1';
@@ -87,7 +86,6 @@ export async function execCommand(raw: string): Promise<ConsoleLine[]> {
   const level = consoleLevel();
 
   switch (cmd) {
-    // ---------------- Гость ----------------
     case 'help':
       return out(buildHelp(level));
 
@@ -138,7 +136,6 @@ export async function execCommand(raw: string): Promise<ConsoleLine[]> {
       return out(['🔒 Режим разработчика выключен.']);
     }
 
-    // ---------------- view ----------------
     case 'look': {
       if (!has(level, 'view')) return noPerm('view');
       const nick = args[0];
@@ -171,7 +168,6 @@ export async function execCommand(raw: string): Promise<ConsoleLine[]> {
       return out(log.map((e) => `${e.icon} ${e.text}`));
     }
 
-    // ---------------- helper / dev: подарок ----------------
     case 'gift': {
       if (!has(level, 'helper')) return noPerm('helper');
       const target = args[0];
@@ -191,7 +187,6 @@ export async function execCommand(raw: string): Promise<ConsoleLine[]> {
       return out([`🎁 Подарок отправлен: ${target} +${amount} ${resource}${fromAir ? ' (из воздуха)' : ' (из твоих запасов)'}.`]);
     }
 
-    // ---------------- dev: управление ----------------
     case 'grant':
     case 'revoke': {
       if (!has(level, 'dev')) return noPerm('dev');
@@ -212,7 +207,6 @@ export async function execCommand(raw: string): Promise<ConsoleLine[]> {
         `${p.is_dev ? '👑' : (p.perms?.length ? '🔑' : '·')} ${p.nick} — сила ${fmt(p.power)}${p.perms?.length ? ` [${p.perms.join(',')}]` : ''}`)]);
     }
 
-    // ---------------- dev: читы ----------------
     case 'give': {
       if (!has(level, 'dev')) return noPerm('dev');
       const target = largs[0];

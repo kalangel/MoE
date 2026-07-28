@@ -85,7 +85,6 @@ export function paragonSpent(nodes: Record<string, number>): number {
   return total;
 }
 
-// ---------- Уровни и ОП Эталона ----------
 export const POINTS_PER_LEVEL = 3;
 export function xpToNext(level: number): number {
   return 600 + level * 300;
@@ -104,7 +103,6 @@ export function availablePoints(s: GameState): number {
   return paragonPointsTotal(s.paragon?.xp ?? 0) - paragonSpent(s.paragon?.nodes ?? {});
 }
 
-// ---------- Способности Эталона ----------
 export interface ParagonAbility {
   id: string;
   name: string;

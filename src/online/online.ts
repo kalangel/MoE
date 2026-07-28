@@ -9,7 +9,6 @@ import type { Resource } from '../game/types';
 export { onlineConfigured };
 export const onlineSession = () => useOnlineStore.getState().userId != null;
 
-// -------- Аутентификация --------
 export async function signUp(email: string, password: string) {
   if (!supabase) return { error: 'Онлайн не настроен' };
   const { error } = await supabase.auth.signUp({ email, password });
@@ -41,7 +40,6 @@ function applySession(userId: string | null, email: string | null) {
   os.setStatus(userId ? 'online' : 'offline');
 }
 
-// -------- Снимок моего замка в общий мир --------
 function ensurePlaced() {
   const s = useGame.getState();
   if (s.onlinePlaced) return;
@@ -104,7 +102,6 @@ export async function postEvent(icon: string, text: string) {
   await supabase.from('events').insert({ icon, text, actor: userId, at: Date.now() });
 }
 
-// -------- Отправка результатов PvP в общий мир --------
 async function flushOutbox() {
   if (!supabase) return;
   const { userId } = useOnlineStore.getState();
@@ -128,7 +125,6 @@ async function flushOutbox() {
   }
 }
 
-// -------- Применение входящих атак (защита) --------
 async function applyIncoming() {
   if (!supabase) return;
   const { userId } = useOnlineStore.getState();
@@ -141,7 +137,6 @@ async function applyIncoming() {
   }
 }
 
-// -------- Применение входящих подарков ресурсов --------
 async function applyGifts() {
   if (!supabase) return;
   const { userId } = useOnlineStore.getState();
@@ -154,7 +149,6 @@ async function applyGifts() {
   }
 }
 
-// -------- Команды управления (через RPC с проверкой прав на сервере) --------
 export async function setMyDev(value: boolean): Promise<string | null> {
   if (!supabase) return 'офлайн';
   const { userId } = useOnlineStore.getState();
@@ -178,7 +172,6 @@ export async function rpcGift(target: string, resource: string, amount: number, 
   return error?.message ?? null;
 }
 
-// -------- Запуск синхронизации --------
 let timer: ReturnType<typeof setInterval> | null = null;
 let channel: ReturnType<NonNullable<typeof supabase>['channel']> | null = null;
 

@@ -206,7 +206,6 @@ function addParagon(s: GameState, n: number) {
   s.paragon.xp += n;
 }
 
-// ---------- Доход ресурсов и еда (БЕЗ дезертирства) ----------
 function applyFoodAndDesertion(s: GameState, dtMs: number, now: number) {
   const prod = productionPerHour(s, now);
   const dtH = dtMs / HOUR;
@@ -223,7 +222,6 @@ function applyFoodAndDesertion(s: GameState, dtMs: number, now: number) {
   s.desertionDebt = 0;
 }
 
-// ---------- Завершение очередей ----------
 function completeQueues(s: GameState, now: number, offline: boolean): BattleReport | null {
   let report: BattleReport | null = null;
 
@@ -291,7 +289,6 @@ function playerAttack(
   });
 }
 
-// ---------- Бой ----------
 function resolveBattle(
   s: GameState, targetId: string, units: Record<string, number>, formationId: string, at: number,
 ): BattleReport | null {
@@ -359,7 +356,6 @@ function resolveBattle(
   return { win, attackerPower: Math.round(atk), defenderPower: Math.round(def), losses, enemyName, loot };
 }
 
-// ---------- PvP-бой против реального игрока (по снимку силы) ----------
 function resolvePlayerBattle(
   s: GameState, enemy: NonNullable<MarchTask['enemy']>, units: Record<string, number>, formationId: string, at: number,
 ): BattleReport | null {
@@ -439,7 +435,6 @@ function damageNow(t: { damagedAt: number; damageFraction: number }, now: number
   return t.damageFraction * (1 - recovered);
 }
 
-// ---------- Разведка и шпионаж ----------
 function completeScout(s: GameState, targetId: string, kind: ScoutKind, at: number) {
   const target = findTarget(s, targetId);
   if (!target) return;
@@ -497,7 +492,6 @@ function roughResources(r: Partial<Resources>): Partial<Resources> {
   return out;
 }
 
-// ---------- ИИ-боты: живут сами, ведут хронику ----------
 function botPower(b: Bot, now: number): number { return botEffectivePower(b, now); }
 
 function playerStrength(s: GameState, now: number): number {
@@ -602,7 +596,6 @@ function maybePlayerRaid(s: GameState, now: number): BattleReport | null {
   return { win: false, attackerPower: Math.round(raidPower), defenderPower: Math.round(myDef), losses, enemyName: raider.name, loot };
 }
 
-// ---------- Главный тик (работает и для офлайн-дельты) ----------
 function runTick(s: GameState, now: number): BattleReport | null {
   let report: BattleReport | null = null;
   let t = s.lastTick;
@@ -637,7 +630,6 @@ function runTick(s: GameState, now: number): BattleReport | null {
   return report;
 }
 
-// ============================================================
 export const useGame = create<Store>((set, get) => {
   const initial = loadState();
 
@@ -944,7 +936,6 @@ export const useGame = create<Store>((set, get) => {
 
       markMailSeen: () => mutate((s) => { s.mailSeen = Date.now(); }, false),
 
-      // ---------- Онлайн: атака на реального игрока ----------
       sendPlayerAttack: (enemy, units, formationId) => mutate((s) => {
         const now = Date.now();
         const total = Object.values(units).reduce((a, b) => a + b, 0);
@@ -963,7 +954,6 @@ export const useGame = create<Store>((set, get) => {
         pushLog(s, '🐎', `Армия выступила к замку лорда ${enemy.nick}`, 'battle');
       }),
 
-      // ---------- Онлайн: применить входящую атаку (защита) ----------
       applyEnemyAttack: (loot, troopLoss, report) => mutate((s) => {
         for (const [r, v] of Object.entries(loot)) {
           s.resources[r as Resource] = Math.max(0, s.resources[r as Resource] - (v as number));

@@ -5,7 +5,6 @@ import type { Bot, BuildingDef, BuildingId, Camp, GameState, Resource, Resources
 
 export const HOUR = 3600_000;
 
-// ---------- Стоимость и время зданий ----------
 export function buildingCost(def: BuildingDef, targetLevel: number): Partial<Resources> {
   const mult = Math.pow(def.costGrowth, targetLevel - 1);
   const out: Partial<Resources> = {};
@@ -36,7 +35,6 @@ export function trainSpeedMult(s: GameState): number {
   return (1 + 0.05 * Math.max(0, (s.buildings.barracks ?? 0) - 1)) * (1 + paragonMultipliers(s).train);
 }
 
-// ---------- Доход ресурсов ----------
 export function productionPerHour(s: GameState, now: number): Resources {
   const f = FACTIONS[s.faction];
   const economy = 1 + RESEARCH.economy.perLevel * (s.research.economy ?? 0);
@@ -54,7 +52,6 @@ export function productionPerHour(s: GameState, now: number): Resources {
   return out;
 }
 
-// ---------- Армия ----------
 export function unitDef(unitId: string): UnitDef {
   const u = unitById(unitId);
   if (!u) throw new Error('unknown unit ' + unitId);
@@ -124,7 +121,6 @@ export function marchCapacity(s: GameState): number {
   return Math.floor(base * FACTIONS[s.faction].marchBonus);
 }
 
-// ---------- Боты ----------
 /** Текущая сила цели с учётом регенерации после понесённых потерь. */
 export function effectivePower(
   t: { basePower: number; damagedAt: number; damageFraction: number },
@@ -162,7 +158,6 @@ export function scoutTimeMs(from: { x: number; y: number }, to: { x: number; y: 
   return sec * 1000;
 }
 
-// ---------- Утилиты ----------
 export function canAfford(have: Resources, cost: Partial<Resources>): boolean {
   return Object.entries(cost).every(([r, v]) => have[r as Resource] >= (v as number));
 }

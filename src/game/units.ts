@@ -1,6 +1,5 @@
 import type { FactionId, Resource, Resources, TargetKind, UnitClass, UnitDef } from './types';
 
-// ---------- Классы юнитов и вкладки ----------
 export const CLASS_META: Record<UnitClass, { name: string; icon: string }> = {
   sword: { name: 'Мечники', icon: '⚔️' },
   spear: { name: 'Копейщики', icon: '🔱' },
@@ -12,7 +11,6 @@ export const CLASS_META: Record<UnitClass, { name: string; icon: string }> = {
 export const CLASS_ORDER: UnitClass[] = ['sword', 'spear', 'cavalry', 'ranged', 'siege', 'shadow'];
 export const RANK_ROMAN: Record<number, string> = { 1: 'I', 2: 'II', 3: 'III' };
 
-// ---------- Контр-система (атакующий класс × класс защитника) ----------
 const COUNTER: Record<UnitClass, Partial<Record<UnitClass, number>>> = {
   sword:   { spear: 1.4, ranged: 1.0, cavalry: 0.9, siege: 1.15, shadow: 1.05 },
   spear:   { cavalry: 1.5, sword: 0.9, ranged: 1.0, siege: 1.0, shadow: 1.0 },
@@ -31,7 +29,6 @@ export function counterVs(attacker: UnitClass, defComp: Partial<Record<UnitClass
   return weight > 0 ? total / weight : 1;
 }
 
-// ---------- Базовые статы по классам + ранги ----------
 const RANK_MULT: Record<number, number> = { 1: 1, 2: 1.38, 3: 1.85 };
 type Base = { atk: number; def: number; upkeep: number; train: number; cost: Partial<Resources> };
 const BASE: Record<UnitClass, Base> = {
@@ -58,7 +55,6 @@ function mk(id: string, name: string, cls: UnitClass, rank: 1 | 2 | 3, icon: str
   };
 }
 
-// ---------- Ростер фракций (по 6 юнитов; сигнатурные id сохранены) ----------
 export const FACTION_UNITS: Record<FactionId, UnitDef[]> = {
   highland: [
     mk('teutonic', 'Тевтонский рыцарь', 'sword', 2, '🛡️'),
@@ -94,7 +90,6 @@ export const FACTION_UNITS: Record<FactionId, UnitDef[]> = {
   ],
 };
 
-// ---------- Формации ----------
 export interface Formation {
   id: string;
   name: string;
@@ -132,7 +127,6 @@ export const SLOTS: FormationSlot[] = [
   { id: 'reserve', label: 'Резерв', row: 1, col: 2 },
 ];
 
-// ---------- Состав гарнизона цели (для контр-системы и отчётов) ----------
 const FACTION_COMP: Record<FactionId, Partial<Record<UnitClass, number>>> = {
   highland: { sword: 0.34, spear: 0.18, cavalry: 0.18, ranged: 0.16, siege: 0.06, shadow: 0.08 },
   tsars:    { sword: 0.28, spear: 0.16, cavalry: 0.24, ranged: 0.18, siege: 0.06, shadow: 0.08 },
@@ -156,7 +150,6 @@ export function compositionCounts(power: number, comp: Partial<Record<UnitClass,
   return out;
 }
 
-// ---------- Расчёт силы атаки (общий для боя и предпросмотра) ----------
 export function attackPower(opts: {
   units: Record<string, number>;
   faction: FactionId;
@@ -183,7 +176,6 @@ export function attackPower(opts: {
   return total * form.atkMult * research * opts.blessAtkMult;
 }
 
-// ---------- Поиск юнита по id (по всем фракциям) ----------
 let UNIT_INDEX: Record<string, UnitDef> | null = null;
 export function unitById(id: string): UnitDef | undefined {
   if (!UNIT_INDEX) {

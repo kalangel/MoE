@@ -197,7 +197,6 @@ export default function MapView() {
   );
 }
 
-// ================== Статичный мир (мемоизирован) ==================
 interface WorldProps {
   bots: Bot[]; camps: Camp[]; faction: FactionId; castleLevel: number;
   playerName: string; playerX: number; playerY: number; playerShieldUntil: number;
@@ -308,7 +307,6 @@ const WorldLayer = memo(function WorldLayer(props: WorldProps) {
   a.playerShieldUntil === b.playerShieldUntil && a.tickSec === b.tickSec,
 );
 
-// ---------- декорации ----------
 function Lake({ cx, cy, rx, ry }: { cx: number; cy: number; rx: number; ry: number }) {
   return (
     <g>

@@ -12,8 +12,6 @@ function playerPower(s: ReturnType<typeof useGame.getState>): number {
   return powerBreakdown(s).total;
 }
 
-// ================= СТРАНИЦЫ (из нижней панели) =================
-
 export function ItemsPage() {
   const inv = useGame((s) => s.inventory);
   const a = useGame((s) => s.actions);
@@ -157,8 +155,6 @@ export function SettingsPage() {
     </Page>
   );
 }
-
-// ================= ОКНА (из верхней панели карты) =================
 
 export function PantheonWindow({ onClose }: { onClose: () => void }) {
   const s = useGame();

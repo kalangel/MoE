@@ -144,7 +144,6 @@ export const BUILD_ORDER: BuildingId[] = [
   'barracks', 'academy', 'temple', 'tavern', 'embassy',
 ];
 
-// ---- Щиты ----
 export interface ShieldDef {
   id: string;
   name: string;
@@ -160,7 +159,6 @@ export const SHIELDS: ShieldDef[] = [
 ];
 export const FREE_SHIELD_COOLDOWN_H = 4;
 
-// ---- Исследования ----
 export interface ResearchDef {
   id: string;
   name: string;
@@ -196,7 +194,6 @@ export const RESEARCH: Record<string, ResearchDef> = {
   },
 };
 
-// ---- Благословения Храма ----
 export const BLESSINGS = [
   { id: 'harvest', name: 'Дар урожая', desc: '+25% добыча ресурсов', icon: '🌟', incomeMult: 1.25 },
   { id: 'wrath', name: 'Гнев небес', desc: '+20% атака войск', icon: '🔥', attackMult: 1.2 },
@@ -206,7 +203,6 @@ export const BLESSINGS = [
 export const TEMPLE_COOLDOWN_H = 2;
 export const BLESSING_DURATION_H = 1;
 
-// ---- Боты ----
 export const BOT_SEEDS = [
   { id: 'tsarina', name: 'Tsarina', faction: 'tsars' as FactionId, level: 4, basePower: 950, x: 620, y: 360 },
   { id: 'ayato', name: 'Ayato', faction: 'shogun' as FactionId, level: 3, basePower: 540, x: 1690, y: 420 },
@@ -216,7 +212,6 @@ export const BOT_SEEDS = [
 ];
 export const PLAYER_POS = { x: 1200, y: 760 };
 
-// ---- Казармы варваров (нейтральные лагеря, уровни 1–3) ----
 export const CAMP_SEEDS = [
   { id: 'camp_a', level: 1, basePower: 150, x: 1180, y: 470 },
   { id: 'camp_b', level: 1, basePower: 175, x: 1470, y: 1170 },
@@ -225,7 +220,6 @@ export const CAMP_SEEDS = [
 ];
 export const CAMP_REGEN_H = 3; // лагерь восстанавливает силу за 3 часа после разгрома
 
-// ---- Прочий баланс ----
 export const SPY_COST_SILVER = 150;
 export const RECON_COST_SILVER = 80;       // разведотряд (грубая оценка)
 export const RECON_MIN_S = 10;             // время разведки, сек (10–30)
@@ -246,7 +240,6 @@ export const MARCH_SECONDS_PER_100PX = 6;  // скорость похода по
 
 export const ALLIES = ['SteelWolf', 'Mira', 'Dovahkiin', 'Greybeard'];
 
-// ---- Ежедневные задания ----
 export interface QuestDef {
   id: string;
   name: string;
@@ -264,7 +257,6 @@ export const DAILY_QUESTS: QuestDef[] = [
 
 export const START_RESOURCES = { iron: 600, wood: 600, silver: 400, food: 800, gold: 100 };
 
-// ---- Инвентарь (Предметы) ----
 export interface ItemDef {
   id: string;
   name: string;
@@ -280,7 +272,6 @@ export const ITEM_DEFS: ItemDef[] = [
 ];
 export const START_INVENTORY: Record<string, number> = { speedup60: 3, shield8: 1, respack: 2, silverbag: 2 };
 
-// ---- Лотерея (ежедневный розыгрыш) ----
 export interface LotteryPrize { label: string; icon: string; apply: 'gold' | 'silver' | 'iron' | 'wood' | 'food' | 'item'; amount: number; itemId?: string }
 export const LOTTERY_PRIZES: LotteryPrize[] = [
   { label: '50 золота', icon: '👑', apply: 'gold', amount: 50 },
